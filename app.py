@@ -122,6 +122,10 @@ TOOLS = [
     }
 ]
 
+@app.route("/health")
+def health():
+    return "ok", 200
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -129,6 +133,7 @@ def index():
 @app.route("/run", methods=["GET", "POST"])
 def run():
     segment = request.args.get("segment") or request.form.get("segment", "corporate")
+
     def generate():
         client = anthropic.Anthropic()
         messages = []
@@ -205,10 +210,11 @@ def run():
 @app.route("/download")
 def download():
     return send_file(
-        "leads.xlsx", 
-        as_attachment=True, 
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-        download_name="TreBorden_Leads.xlsx")
+        "leads.xlsx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        download_name="TreBorden_Leads.xlsx"
+    )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
