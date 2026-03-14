@@ -203,8 +203,10 @@ def run():
 
 @app.route("/download")
 def download():
+    data_dir = os.environ.get("DATA_DIR", ".")
+    filepath = os.path.join(data_dir, "leads.xlsx")
     return send_file(
-        "leads.xlsx",
+        filepath,
         as_attachment=True,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         download_name="TreBorden_Leads.xlsx"

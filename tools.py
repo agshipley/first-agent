@@ -17,7 +17,8 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
     Corporate leads go to Sheet 1, public sector leads go to Sheet 2.
     Skips duplicates within each sheet.
     """
-    filename = "leads.xlsx"
+    DATA_DIR = os.environ.get("DATA_DIR", ".")
+    filename = os.path.join(DATA_DIR, "leads.xlsx")
     
     sheet_names = {
         "corporate": "Corporate",
