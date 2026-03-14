@@ -168,6 +168,9 @@ def run():
                     yield "data: Rate limit hit, waiting 60 seconds...\n\n"
                     time.sleep(60)
                     yield "data: Retrying...\n\n"
+                except Exception as e:
+                    yield f"data: ERROR: {type(e).__name__}: {str(e)}\n\n" 
+                    return
 
             messages.append({"role": "assistant", "content": response.content})
 
