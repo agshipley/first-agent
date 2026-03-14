@@ -125,6 +125,10 @@ TOOLS = [
 @app.route("/health")
 def health():
     return "ok", 200
+@app.route("/debug")
+def debug():
+    key = os.environ.get("ANTHROPIC_API_KEY", "NOT SET")
+    return f"Key starts with: {key[:8]}..." if key != "NOT SET" else "NOT SET"
 
 @app.route("/")
 def index():
