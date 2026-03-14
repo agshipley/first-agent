@@ -125,10 +125,6 @@ TOOLS = [
 @app.route("/health")
 def health():
     return "ok", 200
-@app.route("/debug")
-def debug():
-    key = os.environ.get("ANTHROPIC_API_KEY", "NOT SET")
-    return f"Key starts with: {key[:8]}..." if key != "NOT SET" else "NOT SET"
 
 @app.route("/")
 def index():
@@ -170,10 +166,12 @@ def run():
                     break
                 except anthropic.RateLimitError:
                     yield "data: Rate limit hit, waiting 60 seconds...\n\n"
-                    time.sleep(60)
+                    for i in range(12):
+                        time.sleep(5)
+                        yield f"data: Waiting... ({(i+1)*5}s)\n\n"
                     yield "data: Retrying...\n\n"
                 except Exception as e:
-                    yield f"data: ERROR: {type(e).__name__}: {str(e)}\n\n" 
+                    yield f"data: ERROR: {type(e).__name__}: {str(e)}\n\n"
                     return
 
             messages.append({"role": "assistant", "content": response.content})
