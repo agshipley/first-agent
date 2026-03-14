@@ -201,11 +201,8 @@ def run():
                             result = save_leads_to_spreadsheet(block.input["leads"], segment)
                             saved_leads = block.input["leads"]
                             yield f"data: {result}\n\n"
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": result
-                            })
+                            yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
+                            return
 
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})
