@@ -185,14 +185,6 @@ When you have found and evaluated leads, call the save_leads_to_spreadsheet func
                             "tool_use_id": block.id,
                             "content": result
                         })
-
-                    elif block.name == "web_search":
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": "Search completed"
-                        })
-
             # Feed the tool results back to Claude and continue the loop
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})

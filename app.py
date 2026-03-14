@@ -195,15 +195,7 @@ def run():
                                 "tool_use_id": block.id,
                                 "content": "Search completed"
                             })
-
-                        elif block.name == "save_leads_to_spreadsheet":
-                            yield "data: Evaluating and saving leads...\n\n"
-                            result = save_leads_to_spreadsheet(block.input["leads"], segment)
-                            saved_leads = block.input["leads"]
-                            yield f"data: {result}\n\n"
-                            yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
-                            return
-
+                               
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})
 
