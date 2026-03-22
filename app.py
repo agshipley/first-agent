@@ -2,7 +2,7 @@ import anthropic
 import time
 from datetime import date
 from dotenv import load_dotenv
-from tools import save_leads_to_spreadsheet
+from tools import save_leads_to_spreadsheet, get_existing_leads_for_segment
 import json
 import os
 from flask import Flask, render_template, request, Response, send_file, stream_with_context
@@ -150,6 +150,12 @@ def run():
             and public construction projects with budgets over $100k. Find at least 5 strong leads, 
             evaluate them carefully, and save the results to the spreadsheet."""
 
+        # Tell Claude which companies are already in the spreadsheet so it skips them
+        existing = get_existing_leads_for_segment(segment)
+        if existing:
+            names_list = ", ".join(existing)
+            user_message += f"\n\nIMPORTANT: The following companies have already been researched and saved. Do NOT research or include them again: {names_list}"
+
         yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
         messages.append({"role": "user", "content": user_message})
 
@@ -209,7 +215,6 @@ def run():
                             yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
                             return
                         # Do NOT handle web_search here — it's a server-side tool.
-                        # The API executes it internally and includes results in the response.
 
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})

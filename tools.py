@@ -11,6 +11,34 @@ def get_existing_company_names(sheet) -> set:
             existing_names.add(row[0].strip().lower())
     return existing_names
 
+def get_existing_leads_for_segment(segment: str) -> list[str]:
+    """
+    Returns a list of company names already saved for a given segment.
+    Used to tell Claude which companies to skip before it starts searching.
+    """
+    DATA_DIR = os.environ.get("DATA_DIR", ".")
+    filename = os.path.join(DATA_DIR, "leads.xlsx")
+
+    sheet_names = {
+        "corporate": "Corporate",
+        "public_sector": "Public Sector"
+    }
+    sheet_name = sheet_names.get(segment, "Corporate")
+
+    if not os.path.exists(filename):
+        return []
+
+    workbook = openpyxl.load_workbook(filename)
+    if sheet_name not in workbook.sheetnames:
+        return []
+
+    sheet = workbook[sheet_name]
+    names = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            names.append(row[0].strip())
+    return names
+
 def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> str:
     """
     Takes a list of leads and writes them to the correct sheet in leads.xlsx.
