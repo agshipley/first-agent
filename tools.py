@@ -40,6 +40,45 @@ def get_existing_leads_for_segment(segment: str) -> list[str]:
             names.append(row[0].strip())
     return names
 
+def get_all_leads_for_segment(segment: str) -> list[dict]:
+    """
+    Returns all leads for a segment as a list of dicts.
+    Used to display existing leads in the web UI.
+    """
+    DATA_DIR = os.environ.get("DATA_DIR", ".")
+    filename = os.path.join(DATA_DIR, "leads.xlsx")
+
+    sheet_names = {
+        "corporate": "Corporate",
+        "public_sector": "Public Sector"
+    }
+    sheet_name = sheet_names.get(segment, "Corporate")
+
+    if not os.path.exists(filename):
+        return []
+
+    workbook = openpyxl.load_workbook(filename)
+    if sheet_name not in workbook.sheetnames:
+        return []
+
+    sheet = workbook[sheet_name]
+    leads = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            leads.append({
+                "company_name": row[0] or "",
+                "type": row[1] or "",
+                "location": row[2] or "",
+                "why_a_lead": row[3] or "",
+                "company_website": row[4] or "",
+                "source_url": row[5] or "",
+                "potential_contact": row[6] or "",
+                "icp_score": row[7] or 0,
+                "notes": row[8] or "",
+                "date_found": str(row[9]) if len(row) > 9 and row[9] else ""
+            })
+    return leads
+
 def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> str:
     """
     Takes a list of leads and writes them to the correct sheet in leads.xlsx.

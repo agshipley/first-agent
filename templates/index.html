@@ -150,11 +150,26 @@
             margin-bottom: 16px;
         }
 
+        .section-divider {
+            margin-top: 32px;
+            margin-bottom: 16px;
+            padding-top: 24px;
+            border-top: 1px solid #e0e0e0;
+        }
+
         .lead-card {
             border: 1.5px solid #e0e0e0;
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
+        }
+
+        .lead-card.new-lead {
+            border-color: #1a1a1a;
+        }
+
+        .lead-card.previous-lead {
+            opacity: 0.7;
         }
 
         .lead-name {
@@ -173,6 +188,19 @@
             font-size: 13px;
             color: #333;
             line-height: 1.5;
+        }
+
+        .new-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #1a1a1a;
+            color: white;
+            margin-left: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
 
         .icp-badge {
@@ -259,30 +287,68 @@
         </div>
 
         <div id="results">
-            <div class="results-header">Leads Found</div>
-            <div id="leadCards"></div>
+            <div id="newLeadsSection">
+                <div class="results-header">New Leads</div>
+                <div id="newLeadCards"></div>
+            </div>
+            <div id="previousLeadsSection" style="display: none;">
+                <div class="section-divider">
+                    <div class="results-header">Previous Leads</div>
+                </div>
+                <div id="previousLeadCards"></div>
+            </div>
             <a href="/download" class="download-btn">Download Spreadsheet</a>
         </div>
     </div>
 
     <script>
+        function renderLeadCard(lead, isNew) {
+            const score = lead.icp_score || 0;
+            const badgeClass = score >= 8 ? "icp-high" : score >= 6 ? "icp-mid" : "icp-low";
+            const cardClass = isNew ? "lead-card new-lead" : "lead-card previous-lead";
+            const newBadge = isNew ? '<span class="new-badge">New</span>' : "";
+            const dateLine = lead.date_found ? `<span style="margin-left: 8px; font-size: 12px; color: #999;">Found ${lead.date_found}</span>` : "";
+
+            return `
+                <div class="${cardClass}">
+                    <div class="lead-name">
+                        ${lead.company_name}
+                        <span class="icp-badge ${badgeClass}">ICP ${score}</span>
+                        ${newBadge}
+                    </div>
+                    <div class="lead-meta">${lead.type} — ${lead.location}${dateLine}</div>
+                    <div class="lead-why">${lead.why_a_lead}</div>
+                </div>
+            `;
+        }
+
         function runAgent() {
             const segment = document.getElementById("segment").value;
             const btn = document.getElementById("runBtn");
             const status = document.getElementById("status");
             const log = document.getElementById("log");
             const results = document.getElementById("results");
-            const leadCards = document.getElementById("leadCards");
+            const newLeadCards = document.getElementById("newLeadCards");
+            const previousLeadsSection = document.getElementById("previousLeadsSection");
+            const previousLeadCards = document.getElementById("previousLeadCards");
 
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span>Running...';
             status.style.display = "block";
             results.style.display = "none";
             log.innerHTML = "";
-            leadCards.innerHTML = "";
+            newLeadCards.innerHTML = "";
+            previousLeadCards.innerHTML = "";
+            previousLeadsSection.style.display = "none";
 
-            const formData = new FormData();
-            formData.append("segment", segment);
+            // Capture company names that existed before this run
+            let previousNames = new Set();
+            fetch("/leads?" + new URLSearchParams({segment}).toString())
+                .then(r => r.json())
+                .then(existing => {
+                    existing.forEach(l => previousNames.add(l.company_name.toLowerCase()));
+                })
+                .catch(() => {});
 
             const eventSource = new EventSource("/run?" + new URLSearchParams({segment}).toString());
 
@@ -295,24 +361,34 @@
                     btn.innerHTML = "Find Leads";
 
                     try {
-                        const leads = JSON.parse(data.slice(5));
-                        if (leads && leads.length > 0) {
+                        const newLeads = JSON.parse(data.slice(5));
+
+                        // Show new leads
+                        if (newLeads && newLeads.length > 0) {
                             results.style.display = "block";
-                            leads.forEach(lead => {
-                                const score = lead.icp_score || 0;
-                                const badgeClass = score >= 8 ? "icp-high" : score >= 6 ? "icp-mid" : "icp-low";
-                                leadCards.innerHTML += `
-                                    <div class="lead-card">
-                                        <div class="lead-name">
-                                            ${lead.company_name}
-                                            <span class="icp-badge ${badgeClass}">ICP ${score}</span>
-                                        </div>
-                                        <div class="lead-meta">${lead.type} — ${lead.location}</div>
-                                        <div class="lead-why">${lead.why_a_lead}</div>
-                                    </div>
-                                `;
+                            newLeads.forEach(lead => {
+                                newLeadCards.innerHTML += renderLeadCard(lead, true);
                             });
                         }
+
+                        // Fetch all leads and show previous ones below
+                        fetch("/leads?" + new URLSearchParams({segment}).toString())
+                            .then(r => r.json())
+                            .then(allLeads => {
+                                const previous = allLeads.filter(l =>
+                                    !previousNames.has("__empty__") &&
+                                    previousNames.has(l.company_name.toLowerCase())
+                                );
+                                if (previous.length > 0) {
+                                    results.style.display = "block";
+                                    previousLeadsSection.style.display = "block";
+                                    previous.forEach(lead => {
+                                        previousLeadCards.innerHTML += renderLeadCard(lead, false);
+                                    });
+                                }
+                            })
+                            .catch(() => {});
+
                     } catch(err) {
                         console.error("Could not parse leads", err);
                     }

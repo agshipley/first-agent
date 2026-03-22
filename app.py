@@ -2,10 +2,10 @@ import anthropic
 import time
 from datetime import date
 from dotenv import load_dotenv
-from tools import save_leads_to_spreadsheet, get_existing_leads_for_segment
+from tools import save_leads_to_spreadsheet, get_existing_leads_for_segment, get_all_leads_for_segment
 import json
 import os
-from flask import Flask, render_template, request, Response, send_file, stream_with_context
+from flask import Flask, render_template, request, Response, send_file, stream_with_context, jsonify
 
 load_dotenv()
 
@@ -129,6 +129,12 @@ def health():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/leads")
+def leads():
+    segment = request.args.get("segment", "corporate")
+    all_leads = get_all_leads_for_segment(segment)
+    return jsonify(all_leads)
 
 @app.route("/run", methods=["GET", "POST"])
 def run():
