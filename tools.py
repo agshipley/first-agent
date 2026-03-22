@@ -1,5 +1,6 @@
 import openpyxl
 import os
+from datetime import date
 
 def get_existing_company_names(sheet) -> set:
     """
@@ -63,7 +64,8 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
         "Source URL",
         "Potential Contact",
         "ICP Score",
-        "Notes"
+        "Notes",
+        "Date Found"
     ]
 
     # Open existing file or create new one
@@ -71,7 +73,6 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
         workbook = openpyxl.load_workbook(filename)
     else:
         workbook = openpyxl.Workbook()
-        # Rename the default sheet to Corporate
         workbook.active.title = "Corporate"
 
     # Get or create the target sheet
@@ -87,6 +88,7 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
     # Write new leads, skipping duplicates
     saved_count = 0
     skipped_count = 0
+    today = date.today().strftime("%Y-%m-%d")
 
     for lead in leads:
         company_name = lead.get("company_name", "").strip()
@@ -104,7 +106,8 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
                 lead.get("source_url", ""),
                 lead.get("potential_contact", ""),
                 lead.get("icp_score", ""),
-                lead.get("notes", "")
+                lead.get("notes", ""),
+                today
             ]
             sheet.append(row)
             saved_count += 1
