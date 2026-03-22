@@ -188,14 +188,29 @@ def run():
 
                 for block in response.content:
                     if block.type == "tool_use":
-                        if block.name == "web_search":
-                            yield "data: Searching the web...\n\n"
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": "Search completed"
-                            })
-                               
+                        if block.name == "save_leads_to_spreadsheet":
+                            yield "data: Saving leads to spreadsheet...\n\n"
+                            try:
+                                result = save_leads_to_spreadsheet(block.input.get("leads", []), segment)
+                                saved_leads = block.input.get("leads", [])
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": result
+                                })
+                            except Exception as e:
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": f"Error saving leads: {str(e)}",
+                                    "is_error": True
+                                })
+                            # Early return to avoid Railway timeout
+                            yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
+                            return
+                        # Do NOT handle web_search here — it's a server-side tool.
+                        # The API executes it internally and includes results in the response.
+
                 if tool_results:
                     messages.append({"role": "user", "content": tool_results})
 
