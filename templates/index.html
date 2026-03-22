@@ -4,7 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tre Borden /Co — Lead Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --cream: #FAF8F4;
+            --black: #1a1a1a;
+            --pink: #F2C4DE;
+            --pink-dark: #E8A8CC;
+            --gray-text: #666;
+            --gray-light: #e0e0e0;
+            --gray-bg: #F2F0EC;
+            --white: #ffffff;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,247 +26,156 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f0;
-            color: #1a1a1a;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            color: var(--black);
             min-height: 100vh;
+        }
+
+        /* ── Header / Nav ── */
+        .site-header {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 20px;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 32px 48px;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
-        .container {
-            background: white;
-            border-radius: 12px;
-            padding: 48px;
-            max-width: 680px;
-            width: 100%;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
-        }
-
-        .header {
-            margin-bottom: 40px;
-        }
-
-        .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            margin-bottom: 8px;
-        }
-
-        .header p {
-            color: #666;
+        .logo {
             font-size: 15px;
-            line-height: 1.5;
-        }
-
-        .form-group {
-            margin-bottom: 24px;
-        }
-
-        label {
-            display: block;
-            font-size: 13px;
-            font-weight: 500;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 2px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #666;
-            margin-bottom: 8px;
         }
 
-        select {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1.5px solid #e0e0e0;
-            border-radius: 8px;
+        .logo span {
+            color: var(--pink-dark);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
             font-size: 15px;
-            color: #1a1a1a;
-            background: white;
-            appearance: none;
-            cursor: pointer;
-            outline: none;
-            transition: border-color 0.2s;
+            font-weight: 400;
+            padding-top: 4px;
         }
 
-        select:focus {
-            border-color: #1a1a1a;
-        }
-
-        button {
-            width: 100%;
-            padding: 14px;
-            background: #1a1a1a;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #333;
-        }
-
-        button:disabled {
-            background: #999;
-            cursor: not-allowed;
-        }
-
-        #status {
-            margin-top: 32px;
-            display: none;
-        }
-
-        .status-header {
-            font-size: 13px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #666;
-            margin-bottom: 12px;
-        }
-
-        #log {
-            background: #f5f5f0;
-            border-radius: 8px;
-            padding: 16px;
-            font-size: 14px;
-            line-height: 1.8;
-            color: #333;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .log-line {
-            padding: 2px 0;
-        }
-
-        .log-line.highlight {
-            color: #1a1a1a;
-            font-weight: 500;
-        }
-
-        #results {
-            margin-top: 32px;
-            display: none;
-        }
-
-        .results-header {
-            font-size: 13px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #666;
-            margin-bottom: 16px;
-        }
-
-        .section-divider {
-            margin-top: 32px;
-            margin-bottom: 16px;
-            padding-top: 24px;
-            border-top: 1px solid #e0e0e0;
-        }
-
-        .lead-card {
-            border: 1.5px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
-        }
-
-        .lead-card.new-lead {
-            border-color: #1a1a1a;
-        }
-
-        .lead-card.previous-lead {
-            opacity: 0.7;
-        }
-
-        .lead-name {
-            font-weight: 600;
-            font-size: 15px;
-            margin-bottom: 4px;
-        }
-
-        .lead-meta {
-            font-size: 13px;
-            color: #666;
-            margin-bottom: 6px;
-        }
-
-        .lead-why {
-            font-size: 13px;
-            color: #333;
-            line-height: 1.5;
-        }
-
-        .new-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            background: #1a1a1a;
-            color: white;
-            margin-left: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-
-        .icp-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-left: 8px;
-        }
-
-        .icp-high {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .icp-mid {
-            background: #fff8e1;
-            color: #f57f17;
-        }
-
-        .icp-low {
-            background: #fce4ec;
-            color: #c62828;
-        }
-
-        .download-btn {
-            display: inline-block;
-            margin-top: 24px;
-            padding: 12px 24px;
-            background: white;
-            color: #1a1a1a;
-            border: 1.5px solid #1a1a1a;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
+        .nav-links a {
+            color: var(--black);
             text-decoration: none;
-            transition: background 0.2s;
-            width: 100%;
-            text-align: center;
+            transition: opacity 0.2s;
         }
 
-        .download-btn:hover {
-            background: #f5f5f0;
+        .nav-links a:hover {
+            opacity: 0.6;
+        }
+
+        /* ── Divider ── */
+        .divider {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 48px;
+        }
+
+        .divider hr {
+            border: none;
+            border-top: 2.5px solid var(--black);
+            margin: 0;
+        }
+
+        /* ── Main Content ── */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 48px 80px;
+        }
+
+        .page-title {
+            margin-bottom: 48px;
+        }
+
+        .page-title .prefix {
+            font-size: 28px;
+            font-weight: 400;
+            color: var(--pink-dark);
+            font-style: italic;
+        }
+
+        .page-title .title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .page-description {
+            font-size: 16px;
+            line-height: 1.7;
+            max-width: 520px;
+            margin-bottom: 48px;
+            color: var(--black);
+        }
+
+        /* ── Controls ── */
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 48px;
+            flex-wrap: wrap;
+        }
+
+        .segment-btn {
+            padding: 12px 32px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 2px solid var(--black);
+            background: var(--white);
+            color: var(--black);
+        }
+
+        .segment-btn.active {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .segment-btn:not(.active):hover {
+            background: var(--gray-bg);
+        }
+
+        .run-btn {
+            padding: 12px 36px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 2px solid var(--pink-dark);
+            background: var(--pink);
+            color: var(--black);
+            margin-left: auto;
+        }
+
+        .run-btn:hover {
+            background: var(--pink-dark);
+        }
+
+        .run-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .spinner {
             display: inline-block;
             width: 14px;
             height: 14px;
-            border: 2px solid #ffffff40;
-            border-top-color: white;
+            border: 2px solid rgba(26,26,26,0.2);
+            border-top-color: var(--black);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-right: 8px;
@@ -262,58 +185,243 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* ── Status Log ── */
+        #status {
+            display: none;
+            margin-bottom: 48px;
+        }
+
+        .section-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--gray-text);
+            margin-bottom: 12px;
+        }
+
+        #log {
+            background: var(--gray-bg);
+            border-radius: 4px;
+            padding: 20px 24px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--gray-text);
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .log-line {
+            padding: 1px 0;
+        }
+
+        .log-line.highlight {
+            color: var(--black);
+            font-weight: 500;
+        }
+
+        /* ── Results ── */
+        #results {
+            display: none;
+        }
+
+        .results-section {
+            margin-bottom: 40px;
+        }
+
+        .lead-card {
+            border-bottom: 1px solid var(--gray-light);
+            padding: 24px 0;
+        }
+
+        .lead-card:first-child {
+            padding-top: 0;
+        }
+
+        .lead-card.new-lead .lead-name {
+            color: var(--black);
+        }
+
+        .lead-card.previous-lead {
+            opacity: 0.55;
+        }
+
+        .lead-name {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .lead-meta {
+            font-size: 14px;
+            color: var(--gray-text);
+            margin-bottom: 8px;
+        }
+
+        .lead-why {
+            font-size: 14px;
+            color: var(--black);
+            line-height: 1.6;
+            max-width: 720px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .badge-new {
+            background: var(--pink);
+            color: var(--black);
+        }
+
+        .badge-icp {
+            background: var(--gray-bg);
+            color: var(--black);
+        }
+
+        .badge-icp.high {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .badge-icp.mid {
+            background: var(--pink);
+            color: var(--black);
+        }
+
+        .section-divider-line {
+            border: none;
+            border-top: 1px solid var(--gray-light);
+            margin: 40px 0 16px;
+        }
+
+        /* ── Download ── */
+        .download-btn {
+            display: inline-block;
+            margin-top: 32px;
+            padding: 12px 36px;
+            border-radius: 50px;
+            background: var(--black);
+            color: var(--white);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .download-btn:hover {
+            opacity: 0.8;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .site-header {
+                padding: 24px 24px;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .nav-links {
+                gap: 24px;
+            }
+            .divider {
+                padding: 0 24px;
+            }
+            .main {
+                padding: 32px 24px 60px;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .run-btn {
+                margin-left: 0;
+            }
+            .segment-btn, .run-btn {
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Tre Borden /Co — Lead Finder</h1>
-            <p>Search for potential art commission leads in Los Angeles and surrounding areas.</p>
+
+    <header class="site-header">
+        <div class="logo">TRE<br>BORDEN<br><span>/</span>CO</div>
+        <nav class="nav-links">
+            <a href="https://www.treborden.com/spaces">Our Work /</a>
+            <a href="https://www.treborden.com/about_us">About Us /</a>
+        </nav>
+    </header>
+
+    <div class="divider"><hr></div>
+
+    <main class="main">
+        <div class="page-title">
+            <span class="prefix">Tools / </span><span class="title">Lead Finder</span>
         </div>
 
-        <div class="form-group">
-            <label>Market Segment</label>
-            <select id="segment">
-                <option value="corporate">Corporate</option>
-                <option value="public_sector">Public Sector</option>
-            </select>
-        </div>
+        <p class="page-description">
+            Search for potential art commission leads in Los Angeles and surrounding areas.
+            Results are saved to a shared spreadsheet and deduplicated across searches.
+        </p>
 
-        <button id="runBtn" onclick="runAgent()">Find Leads</button>
+        <div class="controls">
+            <button class="segment-btn active" data-segment="corporate" onclick="selectSegment(this)">Corporate</button>
+            <button class="segment-btn" data-segment="public_sector" onclick="selectSegment(this)">Public Sector</button>
+            <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
+        </div>
 
         <div id="status">
-            <div class="status-header">Status</div>
+            <div class="section-label">Status</div>
             <div id="log"></div>
         </div>
 
         <div id="results">
-            <div id="newLeadsSection">
-                <div class="results-header">New Leads</div>
+            <div id="newLeadsSection" class="results-section">
+                <div class="section-label">New Leads</div>
                 <div id="newLeadCards"></div>
             </div>
-            <div id="previousLeadsSection" style="display: none;">
-                <div class="section-divider">
-                    <div class="results-header">Previous Leads</div>
-                </div>
+            <div id="previousLeadsSection" class="results-section" style="display: none;">
+                <hr class="section-divider-line">
+                <div class="section-label" style="margin-top: 16px;">Previous Leads</div>
                 <div id="previousLeadCards"></div>
             </div>
             <a href="/download" class="download-btn">Download Spreadsheet</a>
         </div>
-    </div>
+    </main>
 
     <script>
+        let selectedSegment = "corporate";
+
+        function selectSegment(btn) {
+            document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedSegment = btn.dataset.segment;
+        }
+
         function renderLeadCard(lead, isNew) {
             const score = lead.icp_score || 0;
-            const badgeClass = score >= 8 ? "icp-high" : score >= 6 ? "icp-mid" : "icp-low";
+            const icpClass = score >= 8 ? "high" : score >= 6 ? "mid" : "";
             const cardClass = isNew ? "lead-card new-lead" : "lead-card previous-lead";
-            const newBadge = isNew ? '<span class="new-badge">New</span>' : "";
-            const dateLine = lead.date_found ? `<span style="margin-left: 8px; font-size: 12px; color: #999;">Found ${lead.date_found}</span>` : "";
+            const newBadge = isNew ? '<span class="badge badge-new">New</span>' : "";
+            const dateLine = lead.date_found ? ` · Found ${lead.date_found}` : "";
 
             return `
                 <div class="${cardClass}">
                     <div class="lead-name">
                         ${lead.company_name}
-                        <span class="icp-badge ${badgeClass}">ICP ${score}</span>
+                        <span class="badge badge-icp ${icpClass}">ICP ${score}</span>
                         ${newBadge}
                     </div>
                     <div class="lead-meta">${lead.type} — ${lead.location}${dateLine}</div>
@@ -323,7 +431,6 @@
         }
 
         function runAgent() {
-            const segment = document.getElementById("segment").value;
             const btn = document.getElementById("runBtn");
             const status = document.getElementById("status");
             const log = document.getElementById("log");
@@ -333,7 +440,7 @@
             const previousLeadCards = document.getElementById("previousLeadCards");
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>Running...';
+            btn.innerHTML = '<span class="spinner"></span>Searching...';
             status.style.display = "block";
             results.style.display = "none";
             log.innerHTML = "";
@@ -341,16 +448,15 @@
             previousLeadCards.innerHTML = "";
             previousLeadsSection.style.display = "none";
 
-            // Capture company names that existed before this run
             let previousNames = new Set();
-            fetch("/leads?" + new URLSearchParams({segment}).toString())
+            fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString())
                 .then(r => r.json())
                 .then(existing => {
                     existing.forEach(l => previousNames.add(l.company_name.toLowerCase()));
                 })
                 .catch(() => {});
 
-            const eventSource = new EventSource("/run?" + new URLSearchParams({segment}).toString());
+            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment}).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;
@@ -363,7 +469,6 @@
                     try {
                         const newLeads = JSON.parse(data.slice(5));
 
-                        // Show new leads
                         if (newLeads && newLeads.length > 0) {
                             results.style.display = "block";
                             newLeads.forEach(lead => {
@@ -371,12 +476,10 @@
                             });
                         }
 
-                        // Fetch all leads and show previous ones below
-                        fetch("/leads?" + new URLSearchParams({segment}).toString())
+                        fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString())
                             .then(r => r.json())
                             .then(allLeads => {
                                 const previous = allLeads.filter(l =>
-                                    !previousNames.has("__empty__") &&
                                     previousNames.has(l.company_name.toLowerCase())
                                 );
                                 if (previous.length > 0) {
