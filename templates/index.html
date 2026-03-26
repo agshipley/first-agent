@@ -403,6 +403,7 @@
 
     <script>
         let selectedSegment = "corporate";
+        const MAX_RETRIES = 2;
 
         function selectSegment(btn) {
             document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
@@ -430,7 +431,18 @@
             `;
         }
 
-        function runAgent() {
+        function addLogLine(text, highlight) {
+            const log = document.getElementById("log");
+            const line = document.createElement("div");
+            line.className = "log-line" + (highlight ? " highlight" : "");
+            line.textContent = text;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function runAgent(retryCount) {
+            retryCount = retryCount || 0;
+
             const btn = document.getElementById("runBtn");
             const status = document.getElementById("status");
             const log = document.getElementById("log");
@@ -439,14 +451,17 @@
             const previousLeadsSection = document.getElementById("previousLeadsSection");
             const previousLeadCards = document.getElementById("previousLeadCards");
 
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>Searching...';
-            status.style.display = "block";
-            results.style.display = "none";
-            log.innerHTML = "";
-            newLeadCards.innerHTML = "";
-            previousLeadCards.innerHTML = "";
-            previousLeadsSection.style.display = "none";
+            // Only reset UI on the first attempt, not on retries
+            if (retryCount === 0) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>Searching...';
+                status.style.display = "block";
+                results.style.display = "none";
+                log.innerHTML = "";
+                newLeadCards.innerHTML = "";
+                previousLeadCards.innerHTML = "";
+                previousLeadsSection.style.display = "none";
+            }
 
             let previousNames = new Set();
             fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString())
@@ -456,10 +471,13 @@
                 })
                 .catch(() => {});
 
+            let receivedData = false;
+
             const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment}).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;
+                receivedData = true;
 
                 if (data.startsWith("DONE|")) {
                     eventSource.close();
@@ -498,21 +516,24 @@
                     return;
                 }
 
-                const line = document.createElement("div");
-                line.className = "log-line" + (data.includes("Saved") ? " highlight" : "");
-                line.textContent = data;
-                log.appendChild(line);
-                log.scrollTop = log.scrollHeight;
+                addLogLine(data, data.includes("Saved"));
             };
 
             eventSource.onerror = function() {
                 eventSource.close();
+
+                // If we never received any data and have retries left, try again
+                if (!receivedData && retryCount < MAX_RETRIES) {
+                    addLogLine("Connecting to server... (attempt " + (retryCount + 2) + ")", false);
+                    setTimeout(function() {
+                        runAgent(retryCount + 1);
+                    }, 3000);
+                    return;
+                }
+
                 btn.disabled = false;
                 btn.innerHTML = "Find Leads";
-                const line = document.createElement("div");
-                line.className = "log-line";
-                line.textContent = "Connection error. Please try again.";
-                log.appendChild(line);
+                addLogLine("Unable to connect. Please wait a moment and try again.", false);
             };
         }
     </script>
