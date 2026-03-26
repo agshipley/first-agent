@@ -95,8 +95,6 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
     return leads
 
 def _apply_table_formatting(sheet, sheet_name):
-    """Remove any existing table, then add a fresh one covering all data rows."""
-    # Remove existing tables
     sheet.tables.clear()
 
     max_row = sheet.max_row
@@ -117,17 +115,18 @@ def _apply_table_formatting(sheet, sheet_name):
     )
     sheet.add_table(table)
 
-    # Column widths
     for col_letter, width in COLUMN_WIDTHS.items():
         sheet.column_dimensions[col_letter].width = width
 
-    # Text wrapping and top-alignment for all data cells
     wrap_alignment = Alignment(wrap_text=True, vertical="top")
     for row in sheet.iter_rows(min_row=2, max_row=max_row, max_col=max_col):
         for cell in row:
             cell.alignment = wrap_alignment
 
-def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> str:
+def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> tuple[str, list[dict]]:
+    """
+    Returns a tuple: (result_message, actually_saved_leads)
+    """
     DATA_DIR = os.environ.get("DATA_DIR", ".")
     filename = os.path.join(DATA_DIR, "leads.xlsx")
     sheet_names = {"corporate": "Corporate", "public_sector": "Public Sector"}
@@ -145,7 +144,6 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
         sheet = workbook.create_sheet(title=sheet_name)
         sheet.append(HEADERS)
 
-    # Ensure headers exist in row 1
     if sheet.cell(row=1, column=1).value != HEADERS[0]:
         sheet.insert_rows(1)
         for col_idx, header in enumerate(HEADERS, 1):
@@ -155,6 +153,7 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
 
     saved_count = 0
     skipped_count = 0
+    actually_saved = []
     today = date.today().strftime("%Y-%m-%d")
 
     for lead in leads:
@@ -178,7 +177,9 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
             sheet.append(row)
             saved_count += 1
             existing_names.add(company_name.lower())
+            actually_saved.append(lead)
 
     _apply_table_formatting(sheet, sheet_name)
     workbook.save(filename)
-    return f"Saved {saved_count} new leads to '{sheet_name}', skipped {skipped_count} duplicates."
+    message = f"Saved {saved_count} new leads to '{sheet_name}', skipped {skipped_count} duplicates."
+    return message, actually_saved

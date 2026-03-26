@@ -203,8 +203,8 @@ def run():
                         if block.name == "save_leads_to_spreadsheet":
                             yield "data: Saving leads to spreadsheet...\n\n"
                             try:
-                                result = save_leads_to_spreadsheet(block.input.get("leads", []), segment)
-                                saved_leads = block.input.get("leads", [])
+                                result, actually_saved = save_leads_to_spreadsheet(block.input.get("leads", []), segment)
+                                saved_leads = actually_saved
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": block.id,
