@@ -138,14 +138,33 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
             })
     return leads
 
-def _apply_table_formatting(sheet, sheet_name):
+DEEP_DIVE_HEADERS = [
+    "Project Status",
+    "News Summary",
+    "Existing Art Attachments",
+    "Key Principals",
+    "Commissioning History",
+    "Deep Dive Date",
+]
+
+DEEP_DIVE_COLUMN_WIDTHS = {
+    "O": 60,  # Project Status
+    "P": 60,  # News Summary
+    "Q": 60,  # Existing Art Attachments
+    "R": 60,  # Key Principals
+    "S": 60,  # Commissioning History
+    "T": 14,  # Deep Dive Date
+}
+
+def _apply_table_formatting(sheet, sheet_name, max_col=None):
     sheet.tables.clear()
 
     max_row = sheet.max_row
     if max_row < 2:
         return
 
-    max_col = len(HEADERS)
+    if max_col is None:
+        max_col = len(HEADERS)
     ref = f"A1:{get_column_letter(max_col)}{max_row}"
     table_name = TABLE_NAMES.get(sheet_name, "Leads")
 
@@ -232,3 +251,80 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
     workbook.save(filename)
     message = f"Saved {saved_count} new leads to '{sheet_name}', skipped {skipped_count} duplicates."
     return message, actually_saved
+
+
+def save_deep_dive_to_spreadsheet(report: dict) -> str:
+    """
+    Finds the lead row matching report['company_name'] across all sheets,
+    appends deep dive column headers if not already present, and writes
+    the section findings into that row. Returns a status message.
+    """
+    DATA_DIR = os.environ.get("DATA_DIR", ".")
+    filename = os.path.join(DATA_DIR, "leads.xlsx")
+
+    if not os.path.exists(filename):
+        return "leads.xlsx not found"
+
+    workbook = openpyxl.load_workbook(filename)
+    company_name_lower = report.get("company_name", "").strip().lower()
+    sections = report.get("report_sections", {})
+    today = date.today().strftime("%Y-%m-%d")
+
+    # Search all sheets for the matching row
+    target_sheet = None
+    target_row_idx = None
+    for sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+        for row_idx in range(2, sheet.max_row + 1):
+            cell_val = sheet.cell(row=row_idx, column=1).value
+            if cell_val and cell_val.strip().lower() == company_name_lower:
+                target_sheet = sheet
+                target_row_idx = row_idx
+                break
+        if target_sheet:
+            break
+
+    if not target_sheet:
+        return f"Lead '{report.get('company_name')}' not found in spreadsheet"
+
+    # Build header map: {header_name: 1-based column index}
+    header_map = {}
+    for col_idx in range(1, target_sheet.max_column + 1):
+        val = target_sheet.cell(row=1, column=col_idx).value
+        if val:
+            header_map[val] = col_idx
+
+    # Append any missing deep dive headers after the last occupied column
+    next_col = max(header_map.values()) + 1 if header_map else 1
+    for header in DEEP_DIVE_HEADERS:
+        if header not in header_map:
+            target_sheet.cell(row=1, column=next_col, value=header)
+            header_map[header] = next_col
+            next_col += 1
+
+    # Write findings into the target row
+    section_map = {
+        "Project Status":           sections.get("project_status", {}).get("findings", ""),
+        "News Summary":             sections.get("news_and_media", {}).get("findings", ""),
+        "Existing Art Attachments": sections.get("existing_art_attachments", {}).get("findings", ""),
+        "Key Principals":           sections.get("key_principals", {}).get("findings", ""),
+        "Commissioning History":    sections.get("commissioning_history", {}).get("findings", ""),
+        "Deep Dive Date":           today,
+    }
+    wrap_alignment = Alignment(wrap_text=True, vertical="top")
+    for header, value in section_map.items():
+        col = header_map.get(header)
+        if col:
+            cell = target_sheet.cell(row=target_row_idx, column=col, value=value)
+            cell.alignment = wrap_alignment
+
+    # Apply column widths for deep dive columns
+    for col_letter, width in DEEP_DIVE_COLUMN_WIDTHS.items():
+        target_sheet.column_dimensions[col_letter].width = width
+
+    # Reformat table to cover all columns including the new ones
+    full_max_col = max(header_map.values())
+    _apply_table_formatting(target_sheet, target_sheet.title, max_col=full_max_col)
+
+    workbook.save(filename)
+    return f"Deep dive data saved for '{report.get('company_name')}'"
