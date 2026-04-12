@@ -38,6 +38,23 @@ TABLE_NAMES = {
     "Public Sector": "PublicSectorLeads"
 }
 
+def _migrate_schema_if_needed(sheet) -> bool:
+    """
+    If the sheet was created before the Geographic Area column was added,
+    insert an empty column D and write the correct header so existing data
+    stays aligned. Returns True if a migration was performed.
+    """
+    if sheet.max_row < 1:
+        return False
+    # Old schema: column D header is "Why They're a Lead"
+    # New schema: column D header is "Geographic Area"
+    if sheet.cell(row=1, column=4).value == "Geographic Area":
+        return False
+    # Insert a blank column at position 4, shifting D:J → E:K
+    sheet.insert_cols(4)
+    sheet.cell(row=1, column=4).value = "Geographic Area"
+    return True
+
 def get_existing_company_names(sheet) -> set:
     existing_names = set()
     for row in sheet.iter_rows(min_row=2, values_only=True):
@@ -143,6 +160,7 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
 
     if sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
+        _migrate_schema_if_needed(sheet)
     else:
         sheet = workbook.create_sheet(title=sheet_name)
         sheet.append(HEADERS)
