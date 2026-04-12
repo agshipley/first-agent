@@ -15,8 +15,11 @@ COLUMN_WIDTHS = {
     "G": 35,    # Source URL
     "H": 30,    # Potential Contact
     "I": 12,    # ICP Score
-    "J": 55,    # Notes
-    "K": 14,    # Date Found
+    "J": 20,    # Estimated Budget
+    "K": 45,    # Budget Basis
+    "L": 18,    # Budget Confidence
+    "M": 55,    # Notes
+    "N": 14,    # Date Found
 }
 
 HEADERS = [
@@ -29,6 +32,9 @@ HEADERS = [
     "Source URL",
     "Potential Contact",
     "ICP Score",
+    "Estimated Budget",
+    "Budget Basis",
+    "Budget Confidence",
     "Notes",
     "Date Found"
 ]
@@ -40,20 +46,35 @@ TABLE_NAMES = {
 
 def _migrate_schema_if_needed(sheet) -> bool:
     """
-    If the sheet was created before the Geographic Area column was added,
-    insert an empty column D and write the correct header so existing data
-    stays aligned. Returns True if a migration was performed.
+    Runs all pending schema migrations in order. Returns True if any migration ran.
+
+    v1 → v2: insert Geographic Area at column D
+      Detection: col D header != "Geographic Area"
+
+    v2 → v3: insert Estimated Budget, Budget Basis, Budget Confidence at column J
+      Detection: col J header == "Notes" (i.e. budget cols not yet present)
     """
     if sheet.max_row < 1:
         return False
-    # Old schema: column D header is "Why They're a Lead"
-    # New schema: column D header is "Geographic Area"
-    if sheet.cell(row=1, column=4).value == "Geographic Area":
-        return False
-    # Insert a blank column at position 4, shifting D:J → E:K
-    sheet.insert_cols(4)
-    sheet.cell(row=1, column=4).value = "Geographic Area"
-    return True
+
+    migrated = False
+
+    # Migration 1: Add Geographic Area column (v1 → v2)
+    if sheet.cell(row=1, column=4).value != "Geographic Area":
+        sheet.insert_cols(4)
+        sheet.cell(row=1, column=4).value = "Geographic Area"
+        migrated = True
+
+    # Migration 2: Add budget columns (v2 → v3)
+    # After migration 1, Notes sits at column J (index 10)
+    if sheet.cell(row=1, column=10).value == "Notes":
+        sheet.insert_cols(10, amount=3)
+        sheet.cell(row=1, column=10).value = "Estimated Budget"
+        sheet.cell(row=1, column=11).value = "Budget Basis"
+        sheet.cell(row=1, column=12).value = "Budget Confidence"
+        migrated = True
+
+    return migrated
 
 def get_existing_company_names(sheet) -> set:
     existing_names = set()
@@ -109,8 +130,11 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
                 "source_url": row[6] or "",
                 "potential_contact": row[7] or "",
                 "icp_score": row[8] or 0,
-                "notes": row[9] or "",
-                "date_found": str(row[10]) if len(row) > 10 and row[10] else ""
+                "estimated_budget": row[9] or "",
+                "budget_basis": row[10] or "",
+                "budget_confidence": row[11] or "",
+                "notes": row[12] or "",
+                "date_found": str(row[13]) if len(row) > 13 and row[13] else ""
             })
     return leads
 
@@ -193,6 +217,9 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
                 lead.get("source_url", ""),
                 lead.get("potential_contact", ""),
                 lead.get("icp_score", ""),
+                lead.get("estimated_budget", ""),
+                lead.get("budget_basis", ""),
+                lead.get("budget_confidence", ""),
                 lead.get("notes", ""),
                 today
             ]

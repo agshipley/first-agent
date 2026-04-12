@@ -37,6 +37,9 @@ TOOLS = [
                             "source_url": {"type": "string"},
                             "potential_contact": {"type": "string"},
                             "icp_score": {"type": "number"},
+                            "estimated_budget": {"type": "string"},
+                            "budget_basis": {"type": "string"},
+                            "budget_confidence": {"type": "string"},
                             "notes": {"type": "string"}
                         }
                     }
@@ -65,11 +68,17 @@ def leads():
 def run():
     segment = request.args.get("segment") or request.form.get("segment", "corporate")
     geography = request.args.get("geography") or request.form.get("geography", "Greater Los Angeles Area")
+    budget = request.args.get("budget") or request.form.get("budget", "Any Budget")
 
     def generate():
         client = anthropic.Anthropic()
         messages = []
         saved_leads = []
+
+        budget_instruction = (
+            f" Prioritize leads whose estimated art commissioning budget is likely to fall within {budget}."
+            if budget != "Any Budget" else ""
+        )
 
         if segment == "corporate":
             user_message = (
@@ -77,6 +86,7 @@ def run():
                 f"in the {geography} area. Find at least 5 strong leads, evaluate "
                 f"them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
+                f"{budget_instruction}"
             )
         else:
             user_message = (
@@ -85,6 +95,7 @@ def run():
                 f"opportunities, and public construction projects with budgets over $100k. Find at "
                 f"least 5 strong leads, evaluate them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
+                f"{budget_instruction}"
             )
 
         existing = get_existing_leads_for_segment(segment)

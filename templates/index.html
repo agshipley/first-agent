@@ -416,6 +416,14 @@
                 <option value="Houston">Houston</option>
                 <option value="New Orleans">New Orleans</option>
             </select>
+            <select class="geo-select" id="budgetSelect">
+                <option value="Any Budget" selected>Any Budget</option>
+                <option value="Under $50K">Under $50K</option>
+                <option value="$50K–$150K">$50K–$150K</option>
+                <option value="$150K–$500K">$150K–$500K</option>
+                <option value="$500K–$1M">$500K–$1M</option>
+                <option value="$1M+">$1M+</option>
+            </select>
             <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
         </div>
 
@@ -501,6 +509,7 @@
             }
 
             const geography = document.getElementById("geoSelect").value;
+            const budget = document.getElementById("budgetSelect").value;
 
             // Await existing leads before opening the stream so previousNames is
             // populated before DONE fires (race condition fix)
@@ -513,7 +522,7 @@
 
             let receivedData = false;
 
-            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography}).toString());
+            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography, budget}).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;

@@ -36,6 +36,18 @@ For each lead you find, extract:
     4-6: active trigger exists (expansion, relocation, renovation) but no evidence of art investment or creative design culture
     7-9: active trigger plus evidence of design investment — past art commissions, design-forward reputation, creative workplace culture
     10: active trigger, strong design culture, and something highly specific — open RFP, direct connection to Tre Borden's past clients, or project at exactly the right commissioning stage
+- estimated_budget: your best estimate of the likely art commissioning budget as a range string, e.g. "$50K–$150K". Base this on available signals:
+    - Art budgets for corporate spaces typically run 0.5%–2% of total construction cost
+    - Large tech/finance/law headquarters in major markets: $150K–$1M+
+    - Mid-size office renovation or relocation: $50K–$250K
+    - Smaller fit-outs or boutique firms: $10K–$75K
+    Do not leave this blank — provide a range even when confidence is Low.
+- budget_basis: one sentence explaining how you derived the estimate, e.g. "1% of estimated $20M construction cost based on project announcement" or "typical range for a company of this scale with a design-forward culture in this market"
+- budget_confidence: your confidence in the estimate — exactly one of:
+    "High" — a specific project value, stated art budget, or applicable ordinance percentage was found
+    "Medium" — inferred from comparable projects, company revenue, or public financial signals
+    "Low" — rough market-based estimate with no specific project signals found
+    ICP score and budget confidence are independent — a lead can have a high ICP score and Low budget confidence or vice versa.
 - notes: anything else relevant
 
 Only include leads you are confident are genuinely relevant. Quality over quantity.
@@ -69,6 +81,17 @@ For each lead you find, extract:
     4-6: active project signal exists, percent-for-art likely applies, but no RFP found and budget unclear
     7-8: active RFP or call for artists identified, budget confirmed above $100k
     9-10: active RFP with budget confirmed significantly above $100k, deadline upcoming, project scope aligns closely with Tre Borden's portfolio
+- estimated_budget: your best estimate of the likely art commissioning budget as a range string, e.g. "$150K–$400K". Base this on available signals:
+    - Public percent-for-art ordinances typically allocate 1%–2% of total project construction cost
+    - If a project value is known or estimable, apply the applicable ordinance percentage
+    - If no project value is known, use comparables for similar project types and sizes in the same region
+    Do not leave this blank — provide a range even when confidence is Low.
+- budget_basis: one sentence explaining how you derived the estimate, e.g. "1% of $15M stated construction cost per LA percent-for-art ordinance" or "comparable transit station art programs in this region typically range $200K–$500K"
+- budget_confidence: your confidence in the estimate — exactly one of:
+    "High" — a specific project value, stated art budget, or ordinance percentage applied to a known project cost was found
+    "Medium" — inferred from comparable projects, project type/scale, or general public financial disclosures
+    "Low" — rough market-based estimate with no specific project value or ordinance data found
+    ICP score and budget confidence are independent — a lead can have a high ICP score and Low budget confidence or vice versa.
 - notes: anything else relevant including budget if known
 
 Only save leads you are confident score 6 or above. Do not save weak signals.
