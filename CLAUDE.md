@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**PERMITS_PROJECT.md is the source of truth for the permits intelligence engine — the art commissioning opportunity scoring system. Read it before making any changes to the permits/ directory or permits-related routes.**
+
 Lead generation AI agent for Tre Borden/Co, a Los Angeles creative studio. The agent uses Claude with web search to find potential clients in two market segments: **corporate** (real estate developers, architecture firms) and **public sector** (municipal agencies, universities, transit authorities pursuing percent-for-art opportunities). Leads are saved to an Excel spreadsheet (`leads.xlsx`).
 
 ## Commands
@@ -70,7 +72,7 @@ Leads stored in `leads.xlsx` with columns: `Company Name | Type | Location | Why
 
 ## Lessons Learned
 
-- web_search is a server-side tool — never intercept it or send tool_result for it
+- web_search is a server-side tool (Anthropic executes the search), but the API still requires an empty tool_result for every tool_use block before the next API call — always send one
 - Railway auto-deploys from main on git push
 - Port 5000 is occupied by AirPlay Receiver on macOS — use PORT=5001 for local testing
 - Use test_formatting.py with fake data to test spreadsheet changes without API cost

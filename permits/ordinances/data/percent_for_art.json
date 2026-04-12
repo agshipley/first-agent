@@ -1,0 +1,39 @@
+[
+  {
+    "city": "Los Angeles",
+    "state": "CA",
+    "ordinance_name": "Private Arts Development Fee Program (PADFP)",
+    "administering_body": "Los Angeles Department of Cultural Affairs (DCA)",
+    "percentage": 0.01,
+    "applies_to": ["PRIVATE_DEVELOPMENT"],
+    "valuation_threshold": 500000,
+    "project_types": [
+      "Commercial",
+      "Industrial",
+      "Apartment",
+      "Mixed-Use"
+    ],
+    "in_lieu_fee_option": true,
+    "in_lieu_fee_percentage": 0.01,
+    "source_url": "https://culturela.org/programs-initiatives/private-arts-development-fee-program/",
+    "notes": "Developers may commission qualifying artwork on-site (meeting DCA's artwork standards) OR pay 1% of construction cost into the city's Cultural Development Fund as an in-lieu fee. The program applies to private development requiring a building permit in the City of Los Angeles. Art must be permanent and publicly accessible.",
+    "last_verified": "2026-04-12"
+  },
+  {
+    "city": "Los Angeles",
+    "state": "CA",
+    "ordinance_name": "Public Works Improvement Arts Program",
+    "administering_body": "Los Angeles Department of Cultural Affairs (DCA)",
+    "percentage": 0.01,
+    "applies_to": ["PUBLIC_CAPITAL_PROJECTS"],
+    "valuation_threshold": null,
+    "project_types": [
+      "Public Capital Projects"
+    ],
+    "in_lieu_fee_option": false,
+    "in_lieu_fee_percentage": null,
+    "source_url": "https://culturela.org/programs-initiatives/public-art/",
+    "notes": "1% of the construction cost of public capital improvement projects is allocated to public art. Administered by DCA in coordination with the relevant city department. Applies to projects funded by the City of Los Angeles capital budget.",
+    "last_verified": "2026-04-12"
+  }
+]

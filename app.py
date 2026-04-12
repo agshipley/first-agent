@@ -15,10 +15,12 @@ from tools import (
     save_deep_dive_to_spreadsheet,
 )
 from flask import Flask, render_template, request, Response, send_file, stream_with_context, jsonify
+from permits.routes import permits_bp
 
 load_dotenv()
 
 app = Flask(__name__)
+app.register_blueprint(permits_bp)
 
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
@@ -212,11 +214,22 @@ def _collect_leads(client, system_prompt, tools, user_message):
             return []
 
         elif response.stop_reason == "tool_use":
+            tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
                     if block.name == "save_leads_to_spreadsheet":
                         return block.input.get("leads", [])
-                    # Do NOT handle web_search — it's a server-side tool.
+                    # web_search is server-side: Anthropic executes the search, but the
+                    # API still requires a tool_result for every tool_use in the message
+                    # history before the next call.  Pass an empty result; the server
+                    # fills in the actual search content.
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "",
+                    })
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
 
 
 # ── Existing routes ───────────────────────────────────────────────────────────

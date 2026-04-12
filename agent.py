@@ -124,6 +124,15 @@ def run_agent():
                             "tool_use_id": block.id,
                             "content": result
                         })
+                    else:
+                        # web_search (server-side): API requires a tool_result for every
+                        # tool_use before the next call, even though the search runs on
+                        # Anthropic's servers. Pass empty content.
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": "",
+                        })
 
             if tool_results:
                 messages.append({"role": "user", "content": tool_results})

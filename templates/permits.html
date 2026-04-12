@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tre Borden /Co — LA Permits Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #FAF8F4;
+            --black: #1a1a1a;
+            --pink: #F2C4DE;
+            --pink-dark: #E8A8CC;
+            --gray-text: #666;
+            --gray-light: #e0e0e0;
+            --gray-bg: #F2F0EC;
+            --white: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            color: var(--black);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .site-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 32px 48px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .logo span { color: var(--pink-dark); }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            font-size: 15px;
+            font-weight: 400;
+            padding-top: 4px;
+        }
+
+        .nav-links a {
+            color: var(--black);
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .nav-links a:hover { opacity: 0.6; }
+        .nav-links a.active { font-weight: 700; }
+
+        .divider { max-width: 1200px; margin: 0 auto; padding: 0 48px; }
+        .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
+
+        /* ── Main ── */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 48px 80px;
+        }
+
+        .page-title { margin-bottom: 12px; }
+
+        .page-title .prefix {
+            font-size: 28px;
+            font-weight: 400;
+            color: var(--pink-dark);
+            font-style: italic;
+        }
+
+        .page-title .title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .page-description {
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--gray-text);
+            margin-bottom: 36px;
+            max-width: 620px;
+        }
+
+        /* ── Source toggle ── */
+        .source-toggle {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+        }
+
+        .toggle-btn {
+            padding: 10px 28px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 2px solid var(--black);
+            background: var(--white);
+            color: var(--black);
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:first-child { border-radius: 50px 0 0 50px; }
+        .toggle-btn:last-child  { border-radius: 0 50px 50px 0; border-left: none; }
+
+        .toggle-btn.active {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .toggle-btn:not(.active):hover { background: var(--gray-bg); }
+
+        /* ── Filter bar ── */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+            padding: 20px 24px;
+            background: var(--gray-bg);
+            border-radius: 8px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--gray-text);
+        }
+
+        .filter-select, .filter-input {
+            padding: 9px 36px 9px 14px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            border: 2px solid var(--black);
+            background-color: var(--white);
+            color: var(--black);
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 13px;
+        }
+
+        .filter-input {
+            padding: 9px 14px;
+            background-image: none;
+        }
+
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--pink-dark);
+        }
+
+        .fetch-btn {
+            padding: 11px 32px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 2px solid var(--pink-dark);
+            background: var(--pink);
+            color: var(--black);
+            margin-left: auto;
+            align-self: flex-end;
+        }
+
+        .fetch-btn:hover { background: var(--pink-dark); }
+        .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .spinner {
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(26,26,26,0.2);
+            border-top-color: var(--black);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Results header ── */
+        .results-meta {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .results-count {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-text);
+        }
+
+        .cache-note {
+            font-size: 12px;
+            color: var(--gray-text);
+        }
+
+        /* ── Error ── */
+        .error-msg {
+            padding: 16px 20px;
+            background: #fff0f0;
+            border: 1px solid #ffb3b3;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #c00;
+            margin-bottom: 24px;
+        }
+
+        /* ── Table ── */
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1.5px solid var(--gray-light);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            padding: 12px 16px;
+            text-align: left;
+            background: var(--black);
+            color: var(--white);
+            font-weight: 600;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        thead th:first-child { border-radius: 6px 0 0 0; }
+        thead th:last-child  { border-radius: 0 6px 0 0; }
+
+        tbody tr {
+            border-bottom: 1px solid var(--gray-light);
+            transition: background 0.15s;
+        }
+
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: #f5f3ef; }
+
+        tbody td {
+            padding: 14px 16px;
+            vertical-align: top;
+            line-height: 1.5;
+        }
+
+        .td-address {
+            font-weight: 500;
+            min-width: 180px;
+        }
+
+        .td-desc {
+            color: var(--gray-text);
+            max-width: 260px;
+            font-size: 12px;
+        }
+
+        .td-value {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .td-date {
+            white-space: nowrap;
+            font-size: 12px;
+            color: var(--gray-text);
+        }
+
+        .td-actions {
+            white-space: nowrap;
+        }
+
+        /* ── Status badges ── */
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .status-UNDER_REVIEW  { background: #fff8e1; color: #a05000; }
+        .status-APPROVED      { background: #e8f5e9; color: #2e7d32; }
+        .status-ISSUED        { background: #e3f2fd; color: #1565c0; }
+        .status-FINAL         { background: #ede7f6; color: #4527a0; }
+        .status-EXPIRED       { background: #fce4ec; color: #880e4f; }
+
+        /* ── Type badges ── */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-NEW_CONSTRUCTION { background: #e6f0ff; color: #2244aa; }
+        .badge-MAJOR_RENOVATION { background: #fff3e0; color: #a05000; }
+        .badge-ADDITION         { background: #e8f5e9; color: #2e7d32; }
+        .badge-COMMERCIAL       { background: #f3e5f5; color: #6a1b9a; }
+        .badge-RESIDENTIAL_MULTI { background: #e0f7fa; color: #006064; }
+
+        /* ── Relevance badges ── */
+        .relevance-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .relevance-High   { background: var(--pink); color: #7a2244; border: 1.5px solid var(--pink-dark); }
+        .relevance-Medium { background: #fff8e1; color: #7a5000; border: 1.5px solid #ffe082; }
+
+        .art-budget {
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .budget-basis {
+            font-size: 11px;
+            color: var(--gray-text);
+            line-height: 1.4;
+            max-width: 160px;
+        }
+
+        /* ── Action buttons ── */
+        .btn-research {
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1.5px solid var(--black);
+            background: var(--white);
+            color: var(--black);
+            transition: all 0.2s;
+        }
+
+        .btn-research:hover {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .btn-permit {
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1.5px solid var(--gray-light);
+            background: var(--white);
+            color: var(--gray-text);
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-block;
+            margin-left: 6px;
+        }
+
+        .btn-permit:hover { border-color: var(--black); color: var(--black); }
+
+        /* ── Empty state ── */
+        .empty-state {
+            padding: 60px 0;
+            text-align: center;
+            color: var(--gray-text);
+            font-size: 15px;
+        }
+
+        .empty-icon {
+            font-size: 36px;
+            margin-bottom: 16px;
+            opacity: 0.4;
+        }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            padding: 12px 20px;
+            background: var(--black);
+            color: var(--white);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        #toast.show { opacity: 1; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .site-header { padding: 24px 20px; }
+            .main { padding: 32px 20px 60px; }
+            .divider { padding: 0 20px; }
+            .nav-links { gap: 20px; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+            .fetch-btn { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="site-header">
+        <a href="https://www.treborden.com" class="logo" style="text-decoration:none;color:inherit;">TRE<br>BORDEN<br><span>/</span>CO</a>
+        <nav class="nav-links">
+            <a href="/permits-monitor" class="active">Permits /</a>
+            <a href="/">Lead Finder /</a>
+            <a href="/reports">Reports /</a>
+            <a href="https://www.treborden.com/spaces">Our Work /</a>
+            <a href="https://www.treborden.com/about_us">About Us /</a>
+        </nav>
+    </header>
+
+    <div class="divider"><hr></div>
+
+    <main class="main">
+        <div class="page-title">
+            <span class="prefix">Tools / </span><span class="title">LA Permits Monitor</span>
+        </div>
+        <p class="page-description">
+            Live LADBS permit data from <a href="https://data.lacity.org" target="_blank" style="color:var(--black);">data.lacity.org</a>.
+            <strong>In Pipeline</strong> shows permits still in plan check — the earliest art commissioning signal.
+            <strong>Recently Issued</strong> shows approved permits where construction is starting.
+        </p>
+
+        <!-- Source toggle -->
+        <div class="source-toggle">
+            <button class="toggle-btn active" id="btnPipeline" onclick="setSource('submitted')">
+                In Pipeline
+            </button>
+            <button class="toggle-btn" id="btnIssued" onclick="setSource('issued')">
+                Recently Issued
+            </button>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <span class="filter-label">Min Valuation</span>
+                <select id="minVal" class="filter-select">
+                    <option value="5000000">$5M+</option>
+                    <option value="10000000">$10M+</option>
+                    <option value="20000000">$20M+</option>
+                    <option value="50000000">$50M+</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Permit Type</span>
+                <select id="permitType" class="filter-select">
+                    <option value="all">All Types</option>
+                    <option value="new">New Construction</option>
+                    <option value="alteration">Alteration / Repair</option>
+                    <option value="addition">Addition</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Use Type</span>
+                <select id="occupancyType" class="filter-select">
+                    <option value="all">All Uses</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="apartment">Apartment / Residential</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label" id="dateLabel">Submitted After</span>
+                <input type="date" id="dateFrom" class="filter-input">
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Show</span>
+                <select id="limit" class="filter-select">
+                    <option value="50">50 results</option>
+                    <option value="100">100 results</option>
+                    <option value="200">200 results</option>
+                </select>
+            </div>
+
+            <button class="fetch-btn" id="fetchBtn" onclick="fetchPermits()">
+                Load Permits
+            </button>
+        </div>
+
+        <!-- Results area -->
+        <div id="errorMsg" class="error-msg" style="display:none;"></div>
+
+        <div class="results-meta" id="resultsMeta" style="display:none;">
+            <span class="results-count" id="resultsCount"></span>
+            <span class="cache-note">Data cached 1 hour · Source: LADBS via data.lacity.org</span>
+        </div>
+
+        <div id="resultsArea">
+            <div class="empty-state">
+                <div class="empty-icon">🏗</div>
+                <div>Select filters above and click <strong>Load Permits</strong> to fetch live permit data.</div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast"></div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────────────────
+        let currentSource = 'submitted';
+
+        function setSource(source) {
+            currentSource = source;
+            document.getElementById('btnPipeline').classList.toggle('active', source === 'submitted');
+            document.getElementById('btnIssued').classList.toggle('active', source === 'issued');
+            document.getElementById('dateLabel').textContent =
+                source === 'submitted' ? 'Submitted After' : 'Issued After';
+        }
+
+        // ── Fetch ──────────────────────────────────────────────────────────────
+        function fetchPermits() {
+            const btn = document.getElementById('fetchBtn');
+            const errorDiv = document.getElementById('errorMsg');
+            const resultsMeta = document.getElementById('resultsMeta');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Loading...';
+            errorDiv.style.display = 'none';
+            resultsMeta.style.display = 'none';
+            document.getElementById('resultsArea').innerHTML = '';
+
+            const statusCategory = currentSource === 'submitted' ? 'pipeline' : 'issued';
+
+            const params = new URLSearchParams({
+                source: currentSource,
+                status_category: statusCategory,
+                min_valuation: document.getElementById('minVal').value,
+                permit_type: document.getElementById('permitType').value,
+                occupancy_type: document.getElementById('occupancyType').value,
+                date_from: document.getElementById('dateFrom').value,
+                limit: document.getElementById('limit').value,
+            });
+
+            fetch('/api/permits?' + params)
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.textContent = 'Load Permits';
+
+                    if (data.error) {
+                        errorDiv.textContent = 'Error: ' + data.error;
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+
+                    renderResults(data.permits || [], currentSource);
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = 'Load Permits';
+                    errorDiv.textContent = 'Network error: ' + err.message;
+                    errorDiv.style.display = 'block';
+                });
+        }
+
+        // ── Render ─────────────────────────────────────────────────────────────
+        function renderResults(permits, source) {
+            const area = document.getElementById('resultsArea');
+            const meta = document.getElementById('resultsMeta');
+            const count = document.getElementById('resultsCount');
+
+            if (permits.length === 0) {
+                area.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div>No permits matched your filters. Try adjusting the criteria.</div></div>';
+                meta.style.display = 'none';
+                return;
+            }
+
+            count.textContent = permits.length + ' permit' + (permits.length === 1 ? '' : 's');
+            meta.style.display = 'flex';
+
+            const dateHeader = source === 'submitted' ? 'Submitted' : 'Issued';
+            const dateKey    = source === 'submitted' ? 'filing_date' : 'approval_date';
+
+            const rows = permits.map(p => {
+                const typeBadge   = permitTypeBadge(p.permit_type);
+                const statusBadge = statusBadgeHtml(p.permit_status);
+                const desc = p.project_description || '';
+                const descTrunc = desc.length > 120 ? desc.slice(0, 120) + '…' : desc;
+                const neighborhood = p.neighborhood || '';
+                const ladbsUrl = p.permit_id
+                    ? `https://epermits.ladbs.org/PermitStatus/Details/${encodeURIComponent(p.permit_id)}`
+                    : '';
+                const relevanceCell = relevanceCellHtml(p);
+                const budgetCell    = budgetCellHtml(p);
+
+                return `<tr>
+                    <td class="td-address">
+                        <strong>${escHtml(p.address)}</strong>
+                        ${neighborhood ? `<br><span style="font-weight:400;color:var(--gray-text);font-size:11px;">${escHtml(neighborhood)}</span>` : ''}
+                    </td>
+                    <td class="td-desc" title="${escHtml(desc)}">${escHtml(descTrunc)}</td>
+                    <td class="td-value">${escHtml(p.valuation_display)}</td>
+                    <td>${typeBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>${relevanceCell}</td>
+                    <td>${budgetCell}</td>
+                    <td class="td-date">${escHtml(p[dateKey] || '')}</td>
+                    <td class="td-actions">
+                        <button class="btn-research" onclick="sendToLeadSearch(${JSON.stringify(p.address)})">Research →</button>
+                        ${ladbsUrl ? `<a class="btn-permit" href="${escHtml(ladbsUrl)}" target="_blank" rel="noopener">Permit ↗</a>` : ''}
+                    </td>
+                </tr>`;
+            }).join('');
+
+            area.innerHTML = `
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Address</th>
+                                <th>Work Description</th>
+                                <th>Valuation</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Art Relevance</th>
+                                <th>Est. Art Budget</th>
+                                <th>${escHtml(dateHeader)}</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        function permitTypeBadge(type) {
+            const labels = {
+                'NEW_CONSTRUCTION': 'New',
+                'MAJOR_RENOVATION': 'Renovation',
+                'ADDITION':         'Addition',
+            };
+            const label = labels[type] || type;
+            const cls = `badge-${type}` in {'badge-NEW_CONSTRUCTION':1,'badge-MAJOR_RENOVATION':1,'badge-ADDITION':1}
+                ? `badge badge-${type}` : 'badge';
+            return `<span class="${cls}">${escHtml(label)}</span>`;
+        }
+
+        function statusBadgeHtml(status) {
+            const labels = {
+                'UNDER_REVIEW': 'Under Review',
+                'APPROVED':     'Approved',
+                'ISSUED':       'Issued',
+                'FINAL':        'Final',
+                'EXPIRED':      'Expired',
+            };
+            const label = labels[status] || status;
+            return `<span class="status-badge status-${status}">${escHtml(label)}</span>`;
+        }
+
+        function relevanceCellHtml(p) {
+            const r = p.relevance;
+            if (r !== 'High' && r !== 'Medium') return '';
+            const reasons = (p.relevance_reasons || []).join('\n');
+            return `<span class="relevance-badge relevance-${r}" title="${escHtml(reasons)}">${escHtml(r)}</span>`;
+        }
+
+        function budgetCellHtml(p) {
+            const r = p.relevance;
+            if (r !== 'High' && r !== 'Medium') return '';
+            if (!p.art_budget_display) return '';
+            return `<div class="art-budget">${escHtml(p.art_budget_display)}</div>
+                    ${p.ordinance_triggered
+                        ? `<div class="budget-basis">${escHtml(p.budget_basis)}</div>`
+                        : ''}`;
+        }
+
+        function sendToLeadSearch(address) {
+            navigator.clipboard.writeText(address).then(() => {
+                showToast('"' + address + '" copied — opening Lead Finder');
+                setTimeout(() => { window.open('/', '_blank'); }, 600);
+            }).catch(() => {
+                showToast('Opening Lead Finder');
+                window.open('/', '_blank');
+            });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ── Init ───────────────────────────────────────────────────────────────
+        // Default date: 1 year ago
+        (function () {
+            const d = new Date();
+            d.setFullYear(d.getFullYear() - 1);
+            document.getElementById('dateFrom').value = d.toISOString().slice(0, 10);
+        })();
+    </script>
+</body>
+</html>
