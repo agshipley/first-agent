@@ -1,4 +1,5 @@
 import anthropic
+import queue
 import threading
 import time
 import uuid
@@ -299,27 +300,13 @@ def run():
         )
 
         if is_la_enhanced:
-            # ── Enhanced path: two separate API calls, merged results ──────────
+            # ── Enhanced path: both phases run in parallel ─────────────────────
+            # Running sequentially took ~120s and hit gunicorn's worker timeout.
+            # Parallel execution cuts wall-clock time to max(phase1, phase2) ≈ 60s.
             yield "data: Starting enhanced LA early-stage search...\n\n"
-            yield "data: Phase 1 of 2: General early-stage search...\n\n"
+            yield "data: Running general search and LA permitting search in parallel...\n\n"
 
-            gen = _collect_leads(client, system_prompt, TOOLS, user_message)
-            try:
-                while True:
-                    msg = next(gen)
-                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
-            except StopIteration as exc:
-                main_leads = exc.value or []
-
-            for lead in main_leads:
-                lead.setdefault("lead_source", "Web Search")
-
-            yield "data: Phase 2 of 2: LA permitting data search...\n\n"
-
-            la_existing = list(existing_names or []) + [
-                l.get("company_name", "") for l in main_leads
-            ]
-            la_system_prompt = get_la_permitting_system_prompt(la_existing if la_existing else None)
+            la_system_prompt = get_la_permitting_system_prompt(existing_names)
             la_user_message = (
                 "Search these specific Los Angeles municipal sources for early-stage development "
                 "projects that are strong candidates for art commissioning by Tre Borden /Co. "
@@ -327,15 +314,54 @@ def run():
                 "projects with percent-for-art requirements. Use all 5 searches on municipal sources."
             )
 
-            gen = _collect_leads(client, la_system_prompt, TOOLS, la_user_message)
-            try:
-                while True:
-                    msg = next(gen)
-                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
-            except StopIteration as exc:
-                la_leads = exc.value or []
+            status_q = queue.Queue()
+            phase1_result = [None]
+            phase2_result = [None]
 
-            # Merge: main leads first, then LA leads not already in main set
+            def _run_phase(gen, result_holder):
+                try:
+                    while True:
+                        status_q.put(next(gen))
+                except StopIteration as exc:
+                    result_holder[0] = exc.value or []
+                status_q.put(None)  # signal this phase is done
+
+            t1 = threading.Thread(
+                target=_run_phase,
+                args=(_collect_leads(client, system_prompt, TOOLS, user_message), phase1_result),
+                daemon=True
+            )
+            t2 = threading.Thread(
+                target=_run_phase,
+                args=(_collect_leads(client, la_system_prompt, TOOLS, la_user_message), phase2_result),
+                daemon=True
+            )
+            t1.start()
+            t2.start()
+
+            done_count = 0
+            while done_count < 2:
+                try:
+                    msg = status_q.get(timeout=15)
+                    if msg is None:
+                        done_count += 1
+                    elif msg.startswith(":"):
+                        yield f"{msg}\n\n"
+                    else:
+                        yield f"data: {msg}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"  # both phases quiet — keep proxy alive
+
+            t1.join()
+            t2.join()
+
+            main_leads = phase1_result[0] or []
+            la_leads   = phase2_result[0] or []
+
+            for lead in main_leads:
+                lead.setdefault("lead_source", "Web Search")
+
+            # Merge: main leads first, then LA leads not already present
             main_names = {l.get("company_name", "").strip().lower() for l in main_leads}
             for lead in la_leads:
                 name = lead.get("company_name", "").strip().lower()
