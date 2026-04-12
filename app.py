@@ -1,4 +1,5 @@
 import anthropic
+import threading
 import time
 import uuid
 import json
@@ -145,14 +146,11 @@ When you have finished all research, call save_deep_dive_report with your struct
 def _collect_leads(client, system_prompt, tools, user_message):
     """
     Generator that runs an agent loop until save_leads_to_spreadsheet is called.
-    Yields plain status strings (caller wraps in SSE format).
-    Returns the collected leads list via StopIteration.value — use:
-
-        gen = _collect_leads(...)
-        try:
-            while True: yield f"data: {next(gen)}\\n\\n"
-        except StopIteration as exc:
-            leads = exc.value or []
+    Yields status strings or ": keepalive" SSE comments to prevent proxy timeouts.
+    Callers must check the prefix:
+        msg.startswith(":") → yield f"{msg}\\n\\n"  (raw SSE comment, invisible to client)
+        otherwise          → yield f"data: {msg}\\n\\n"
+    Returns the collected leads list via StopIteration.value.
     """
     messages = [{"role": "user", "content": user_message}]
     max_iterations = 20
@@ -164,26 +162,42 @@ def _collect_leads(client, system_prompt, tools, user_message):
             yield "Search loop safety limit reached."
             return []
 
-        while True:
+        # Run the blocking API call in a background thread so we can yield
+        # SSE keepalives every 20 s and prevent Railway's proxy from timing out.
+        _result = [None]
+        _error  = [None]
+        _done   = threading.Event()
+
+        def _call():
             try:
-                response = client.messages.create(
+                _result[0] = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=4096,
                     system=system_prompt,
                     tools=tools,
                     messages=messages
                 )
-                break
-            except anthropic.RateLimitError:
+            except Exception as e:
+                _error[0] = e
+            finally:
+                _done.set()
+
+        threading.Thread(target=_call, daemon=True).start()
+        while not _done.wait(timeout=20):
+            yield ": keepalive"  # SSE comment — keeps proxy alive, invisible to JS
+
+        if _error[0] is not None:
+            if isinstance(_error[0], anthropic.RateLimitError):
                 yield "Rate limit hit, waiting 60 seconds..."
                 for i in range(12):
                     time.sleep(5)
                     yield f"Waiting... ({(i+1)*5}s)"
                 yield "Retrying..."
-            except Exception as e:
-                yield f"ERROR: {type(e).__name__}: {str(e)}"
-                return []
+                continue
+            yield f"ERROR: {type(_error[0]).__name__}: {str(_error[0])}"
+            return []
 
+        response = _result[0]
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "end_turn":
@@ -292,7 +306,8 @@ def run():
             gen = _collect_leads(client, system_prompt, TOOLS, user_message)
             try:
                 while True:
-                    yield f"data: {next(gen)}\n\n"
+                    msg = next(gen)
+                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
             except StopIteration as exc:
                 main_leads = exc.value or []
 
@@ -315,7 +330,8 @@ def run():
             gen = _collect_leads(client, la_system_prompt, TOOLS, la_user_message)
             try:
                 while True:
-                    yield f"data: {next(gen)}\n\n"
+                    msg = next(gen)
+                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
             except StopIteration as exc:
                 la_leads = exc.value or []
 
@@ -343,7 +359,8 @@ def run():
             gen = _collect_leads(client, system_prompt, TOOLS, user_message)
             try:
                 while True:
-                    yield f"data: {next(gen)}\n\n"
+                    msg = next(gen)
+                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
             except StopIteration as exc:
                 leads = exc.value or []
 
