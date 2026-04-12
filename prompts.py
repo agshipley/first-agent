@@ -48,6 +48,8 @@ For each lead you find, extract:
     "Medium" — inferred from comparable projects, company revenue, or public financial signals
     "Low" — rough market-based estimate with no specific project signals found
     ICP score and budget confidence are independent — a lead can have a high ICP score and Low budget confidence or vice versa.
+- project_stage: your best assessment of the project's current stage — exactly one of:
+    "Planning/Entitlement", "Permitted", "Design Phase", "Under Construction", "Near Completion", or "Unknown"
 - notes: anything else relevant
 
 Only include leads you are confident are genuinely relevant. Quality over quantity.
@@ -92,6 +94,8 @@ For each lead you find, extract:
     "Medium" — inferred from comparable projects, project type/scale, or general public financial disclosures
     "Low" — rough market-based estimate with no specific project value or ordinance data found
     ICP score and budget confidence are independent — a lead can have a high ICP score and Low budget confidence or vice versa.
+- project_stage: your best assessment of the project's current stage — exactly one of:
+    "Planning/Entitlement", "Permitted", "Design Phase", "Under Construction", "Near Completion", or "Unknown"
 - notes: anything else relevant including budget if known
 
 Only save leads you are confident score 6 or above. Do not save weak signals.

@@ -461,6 +461,11 @@
                 <option value="$500K–$1M">$500K–$1M</option>
                 <option value="$1M+">$1M+</option>
             </select>
+            <select class="geo-select" id="stageSelect">
+                <option value="All Stages" selected>All Stages</option>
+                <option value="Early Stage (Pre-Construction)">Early Stage (Pre-Construction)</option>
+                <option value="Active Construction">Active Construction</option>
+            </select>
             <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
         </div>
 
@@ -563,6 +568,7 @@
 
             const geography = document.getElementById("geoSelect").value;
             const budget = document.getElementById("budgetSelect").value;
+            const project_stage = document.getElementById("stageSelect").value;
 
             // Await existing leads before opening the stream so previousNames is
             // populated before DONE fires (race condition fix)
@@ -575,7 +581,7 @@
 
             let receivedData = false;
 
-            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography, budget}).toString());
+            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography, budget, project_stage}).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;

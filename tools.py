@@ -18,8 +18,9 @@ COLUMN_WIDTHS = {
     "J": 20,    # Estimated Budget
     "K": 45,    # Budget Basis
     "L": 18,    # Budget Confidence
-    "M": 55,    # Notes
-    "N": 14,    # Date Found
+    "M": 22,    # Project Stage
+    "N": 55,    # Notes
+    "O": 14,    # Date Found
 }
 
 HEADERS = [
@@ -35,6 +36,7 @@ HEADERS = [
     "Estimated Budget",
     "Budget Basis",
     "Budget Confidence",
+    "Project Stage",
     "Notes",
     "Date Found"
 ]
@@ -53,6 +55,9 @@ def _migrate_schema_if_needed(sheet) -> bool:
 
     v2 → v3: insert Estimated Budget, Budget Basis, Budget Confidence at column J
       Detection: col J header == "Notes" (i.e. budget cols not yet present)
+
+    v3 → v4: insert Project Stage at column M
+      Detection: col M header == "Notes" (i.e. project stage not yet present)
     """
     if sheet.max_row < 1:
         return False
@@ -72,6 +77,13 @@ def _migrate_schema_if_needed(sheet) -> bool:
         sheet.cell(row=1, column=10).value = "Estimated Budget"
         sheet.cell(row=1, column=11).value = "Budget Basis"
         sheet.cell(row=1, column=12).value = "Budget Confidence"
+        migrated = True
+
+    # Migration 3: Add Project Stage column (v3 → v4)
+    # After migrations 1+2, Notes sits at column M (index 13)
+    if sheet.cell(row=1, column=13).value == "Notes":
+        sheet.insert_cols(13)
+        sheet.cell(row=1, column=13).value = "Project Stage"
         migrated = True
 
     return migrated
@@ -133,8 +145,9 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
                 "estimated_budget": row[9] or "",
                 "budget_basis": row[10] or "",
                 "budget_confidence": row[11] or "",
-                "notes": row[12] or "",
-                "date_found": str(row[13]) if len(row) > 13 and row[13] else ""
+                "project_stage": row[12] or "" if len(row) > 12 else "",
+                "notes": row[13] or "" if len(row) > 13 else "",
+                "date_found": str(row[14]) if len(row) > 14 and row[14] else ""
             })
     return leads
 
@@ -148,12 +161,12 @@ DEEP_DIVE_HEADERS = [
 ]
 
 DEEP_DIVE_COLUMN_WIDTHS = {
-    "O": 60,  # Project Status
-    "P": 60,  # News Summary
-    "Q": 60,  # Existing Art Attachments
-    "R": 60,  # Key Principals
-    "S": 60,  # Commissioning History
-    "T": 14,  # Deep Dive Date
+    "P": 60,  # Project Status
+    "Q": 60,  # News Summary
+    "R": 60,  # Existing Art Attachments
+    "S": 60,  # Key Principals
+    "T": 60,  # Commissioning History
+    "U": 14,  # Deep Dive Date
 }
 
 def _apply_table_formatting(sheet, sheet_name, max_col=None):
@@ -239,6 +252,7 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
                 lead.get("estimated_budget", ""),
                 lead.get("budget_basis", ""),
                 lead.get("budget_confidence", ""),
+                lead.get("project_stage", ""),
                 lead.get("notes", ""),
                 today
             ]

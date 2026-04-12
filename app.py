@@ -53,6 +53,7 @@ TOOLS = [
                             "estimated_budget": {"type": "string"},
                             "budget_basis": {"type": "string"},
                             "budget_confidence": {"type": "string"},
+                            "project_stage": {"type": "string"},
                             "notes": {"type": "string"}
                         }
                     }
@@ -159,6 +160,7 @@ def run():
     segment = request.args.get("segment") or request.form.get("segment", "corporate")
     geography = request.args.get("geography") or request.form.get("geography", "Greater Los Angeles Area")
     budget = request.args.get("budget") or request.form.get("budget", "Any Budget")
+    project_stage = request.args.get("project_stage") or request.form.get("project_stage", "All Stages")
 
     def generate():
         client = anthropic.Anthropic()
@@ -170,13 +172,39 @@ def run():
             if budget != "Any Budget" else ""
         )
 
+        if project_stage == "Early Stage (Pre-Construction)":
+            stage_instruction = (
+                "\n\nProject Stage Focus: Focus on projects that have NOT yet broken ground. "
+                "The goal is to identify opportunities early enough that art commissioning decisions "
+                "haven't been made yet. Projects in the permitting, entitlement, or design phase are "
+                "more valuable than projects already under construction. "
+                "Prioritize searching for:\n"
+                "- Planning commission agendas and meeting minutes mentioning new development projects\n"
+                "- Environmental review notices (CEQA in California, NEPA for federal, local equivalents elsewhere)\n"
+                "- Entitlement applications and zoning change requests\n"
+                "- Building permit applications for new construction or major renovation\n"
+                "- Developer announcements of projects in planning or pre-development\n"
+                "- Percent-for-art program announcements tied to upcoming capital projects\n"
+                "- RFQ/RFP postings from arts commissions or cultural affairs departments "
+                "for projects not yet under construction"
+            )
+        elif project_stage == "Active Construction":
+            stage_instruction = (
+                "\n\nProject Stage Focus: Focus on projects currently under construction where art "
+                "commissioning may still be open. Prioritize larger projects with extended construction "
+                "timelines where interior art programs haven't been finalized. Look for construction "
+                "starts, issued building permits, and projects with completion dates 12+ months out."
+            )
+        else:
+            stage_instruction = ""
+
         if segment == "corporate":
             user_message = (
                 f"Please search for potential corporate art program leads for Tre Borden /Co "
                 f"in the {geography} area. Find at least 5 strong leads, evaluate "
                 f"them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
-                f"{budget_instruction}"
+                f"{budget_instruction}{stage_instruction}"
             )
         else:
             user_message = (
@@ -185,7 +213,7 @@ def run():
                 f"opportunities, and public construction projects with budgets over $100k. Find at "
                 f"least 5 strong leads, evaluate them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
-                f"{budget_instruction}"
+                f"{budget_instruction}{stage_instruction}"
             )
 
         existing = get_existing_leads_for_segment(segment)
