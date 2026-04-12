@@ -448,6 +448,11 @@ def deep_dive_save():
     return jsonify({"message": message})
 
 
+@app.route("/report")
+def report():
+    return render_template("report.html")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

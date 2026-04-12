@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Dive — Tre Borden /Co</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #FAF8F4;
+            --black: #1a1a1a;
+            --pink: #F2C4DE;
+            --pink-dark: #E8A8CC;
+            --gray-text: #666;
+            --gray-light: #e0e0e0;
+            --gray-bg: #F2F0EC;
+            --white: #ffffff;
+            --green: #2d6a4f;
+            --green-bg: #d8f3dc;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            color: var(--black);
+            min-height: 100vh;
+        }
+
+        /* ── Header / Nav ── */
+        .site-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 32px 48px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .logo span { color: var(--pink-dark); }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            font-size: 15px;
+            font-weight: 400;
+            padding-top: 4px;
+        }
+
+        .nav-links a {
+            color: var(--black);
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .nav-links a:hover { opacity: 0.6; }
+
+        .divider { max-width: 1200px; margin: 0 auto; padding: 0 48px; }
+        .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
+
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 48px 80px;
+        }
+
+        /* ── Shared badge styles ── */
+        .badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .badge-icp { background: var(--gray-bg); color: var(--black); }
+        .badge-icp.high { background: var(--black); color: var(--white); }
+        .badge-icp.mid  { background: var(--pink);  color: var(--black); }
+
+        /* ── Back link ── */
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-text);
+            text-decoration: none;
+            margin-bottom: 36px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover { color: var(--black); }
+
+        /* ── Loading state ── */
+        #loadingState { max-width: 680px; }
+
+        .page-title {
+            margin-bottom: 32px;
+        }
+
+        .page-title .prefix {
+            font-size: 28px;
+            font-weight: 400;
+            color: var(--pink-dark);
+            font-style: italic;
+        }
+
+        .page-title .title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .loading-company {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .loading-sub {
+            font-size: 14px;
+            color: var(--gray-text);
+            margin-bottom: 28px;
+        }
+
+        .section-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--gray-text);
+            margin-bottom: 12px;
+        }
+
+        #log {
+            background: var(--gray-bg);
+            border-radius: 4px;
+            padding: 20px 24px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--gray-text);
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .log-line { padding: 1px 0; }
+        .log-line.highlight { color: var(--black); font-weight: 500; }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(26,26,26,0.2);
+            border-top-color: var(--black);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Error state ── */
+        #errorState { display: none; }
+
+        .error-message {
+            font-size: 16px;
+            color: var(--gray-text);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        /* ── Report content ── */
+        #reportContent { display: none; }
+
+        /* Company header */
+        .report-company-header {
+            margin-bottom: 48px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid var(--gray-light);
+        }
+
+        .report-company-name {
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .report-meta {
+            font-size: 15px;
+            color: var(--gray-text);
+            margin-bottom: 8px;
+        }
+
+        .report-budget-wrap {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .report-budget-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--gray-text);
+            margin-right: 8px;
+        }
+
+        .report-budget-value {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .report-why-block {
+            background: var(--gray-bg);
+            border-left: 3px solid var(--pink-dark);
+            border-radius: 0 4px 4px 0;
+            padding: 16px 20px;
+            font-size: 15px;
+            line-height: 1.65;
+            color: var(--black);
+            max-width: 760px;
+            margin-bottom: 16px;
+        }
+
+        .report-date-line {
+            font-size: 13px;
+            color: var(--gray-text);
+            margin-top: 12px;
+        }
+
+        /* Section blocks */
+        .report-sections { margin-bottom: 48px; }
+
+        .section-block {
+            background: var(--white);
+            border: 1px solid var(--gray-light);
+            border-radius: 6px;
+            padding: 28px 32px;
+            margin-bottom: 16px;
+        }
+
+        .section-block-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .section-block-title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--black);
+        }
+
+        /* Completeness badges */
+        .completeness-badge {
+            flex-shrink: 0;
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .completeness-comprehensive {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .completeness-partial {
+            background: var(--pink);
+            color: var(--black);
+        }
+
+        .completeness-limited {
+            background: var(--gray-bg);
+            color: var(--gray-text);
+        }
+
+        .section-findings {
+            font-size: 15px;
+            line-height: 1.75;
+            color: var(--black);
+            margin-bottom: 0;
+        }
+
+        .section-block.limited .section-findings {
+            color: var(--gray-text);
+            font-style: italic;
+        }
+
+        /* Sources */
+        .sources-list {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--gray-light);
+        }
+
+        .sources-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--gray-text);
+            margin-bottom: 8px;
+        }
+
+        .source-link {
+            display: block;
+            font-size: 13px;
+            color: var(--gray-text);
+            text-decoration: none;
+            word-break: break-all;
+            padding: 3px 0;
+            transition: color 0.15s;
+        }
+
+        .source-link:hover { color: var(--black); text-decoration: underline; }
+
+        /* Actions bar */
+        .report-actions {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding-top: 32px;
+            border-top: 1px solid var(--gray-light);
+            flex-wrap: wrap;
+        }
+
+        .save-btn {
+            padding: 12px 32px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            border: 2px solid var(--pink-dark);
+            background: var(--pink);
+            color: var(--black);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .save-btn:hover:not(:disabled) { background: var(--pink-dark); }
+        .save-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+        .save-btn.saved {
+            background: var(--black);
+            border-color: var(--black);
+            color: var(--white);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .site-header { padding: 24px; flex-direction: column; gap: 20px; }
+            .nav-links { gap: 24px; }
+            .divider { padding: 0 24px; }
+            .main { padding: 32px 24px 60px; }
+            .report-company-name { font-size: 28px; }
+            .section-block { padding: 20px; }
+            .section-block-header { flex-direction: column; gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="site-header">
+        <a href="https://www.treborden.com" class="logo">TRE<br>BORDEN<br><span>/</span>CO</a>
+        <nav class="nav-links">
+            <a href="https://www.treborden.com/spaces">Our Work /</a>
+            <a href="https://www.treborden.com/about_us">About Us /</a>
+        </nav>
+    </header>
+
+    <div class="divider"><hr></div>
+
+    <main class="main">
+        <a href="/" class="back-link">← Back to Lead Finder</a>
+
+        <!-- Loading state -->
+        <div id="loadingState">
+            <div class="page-title">
+                <span class="prefix">Tools / Deep Dive / </span><span class="title" id="loadingCompanyName">...</span>
+            </div>
+            <p class="loading-sub"><span class="spinner"></span>Researching this lead — this usually takes about a minute.</p>
+            <div class="section-label">Status</div>
+            <div id="log"></div>
+        </div>
+
+        <!-- Error state -->
+        <div id="errorState">
+            <div class="page-title">
+                <span class="prefix">Tools / </span><span class="title">Deep Dive</span>
+            </div>
+            <p class="error-message" id="errorMessage"></p>
+        </div>
+
+        <!-- Report content -->
+        <div id="reportContent">
+
+            <div class="report-company-header">
+                <div class="report-company-name">
+                    <span id="reportCompanyName"></span>
+                    <span class="badge badge-icp" id="reportIcpBadge" style="display:none"></span>
+                </div>
+                <div class="report-meta" id="reportMeta"></div>
+                <div class="report-budget-wrap" id="reportBudgetWrap">
+                    <span class="report-budget-label">Est. Budget</span>
+                    <span class="report-budget-value" id="reportBudget"></span>
+                </div>
+                <div class="report-why-block" id="reportWhyALead"></div>
+                <div class="report-date-line" id="reportDate"></div>
+            </div>
+
+            <div id="reportSections" class="report-sections"></div>
+
+            <div class="report-actions">
+                <button class="save-btn" id="saveBtn" onclick="saveToSpreadsheet()">Save to Spreadsheet</button>
+                <a href="/" class="back-link" style="margin-bottom:0">← Back to Lead Finder</a>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        let currentReportId = null;
+
+        const SECTIONS = [
+            { key: 'project_status',           title: 'Project Status & Timeline' },
+            { key: 'news_and_media',           title: 'News & Media' },
+            { key: 'existing_art_attachments', title: 'Existing Art / Design Attachments' },
+            { key: 'key_principals',           title: 'Key Principals' },
+            { key: 'commissioning_history',    title: 'Commissioning History' },
+        ];
+
+        // ── Init ─────────────────────────────────────────────────────────────
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const reportId = params.get('id');
+
+            if (reportId) {
+                await loadExistingReport(reportId);
+            } else {
+                const pending = localStorage.getItem('pendingDeepDive');
+                if (!pending) {
+                    showError('No lead data found. Return to Lead Finder and click Deep Dive on a lead.');
+                    return;
+                }
+                let leadData;
+                try { leadData = JSON.parse(pending); } catch(e) {
+                    showError('Could not read lead data. Please try again.');
+                    return;
+                }
+                localStorage.removeItem('pendingDeepDive');
+                document.getElementById('loadingCompanyName').textContent = leadData.company_name || '...';
+                document.title = `${leadData.company_name || 'Deep Dive'} — Tre Borden /Co`;
+                await runDeepDive(leadData);
+            }
+        });
+
+        // ── State helpers ─────────────────────────────────────────────────────
+
+        function showError(msg) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorMessage').textContent = msg;
+            document.getElementById('errorState').style.display = 'block';
+        }
+
+        function addLogLine(text, highlight) {
+            const log = document.getElementById('log');
+            const line = document.createElement('div');
+            line.className = 'log-line' + (highlight ? ' highlight' : '');
+            line.textContent = text;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // ── Load existing report ──────────────────────────────────────────────
+
+        async function loadExistingReport(reportId) {
+            try {
+                const r = await fetch(`/reports/${encodeURIComponent(reportId)}`);
+                if (!r.ok) throw new Error('Report not found.');
+                const report = await r.json();
+                renderReport(report);
+            } catch (err) {
+                showError(err.message || 'Could not load report.');
+            }
+        }
+
+        // ── Run deep dive via POST + ReadableStream ───────────────────────────
+
+        async function runDeepDive(leadData) {
+            try {
+                const response = await fetch('/deep-dive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(leadData),
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // SSE events are separated by \n\n
+                    const parts = buffer.split('\n\n');
+                    buffer = parts.pop(); // last part may be incomplete
+
+                    for (const part of parts) {
+                        for (const line of part.split('\n')) {
+                            if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
+                        }
+                    }
+                }
+
+                // Drain any remaining buffer
+                for (const line of buffer.split('\n')) {
+                    if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
+                }
+
+            } catch (err) {
+                showError('Deep dive failed: ' + err.message);
+            }
+        }
+
+        function handleStreamEvent(data) {
+            if (data.startsWith('REPORT_ID|')) {
+                currentReportId = data.slice(10);
+                history.replaceState(null, '', `/report?id=${encodeURIComponent(currentReportId)}`);
+            } else if (data.startsWith('DONE|')) {
+                loadExistingReport(data.slice(5));
+            } else if (data.startsWith('ERROR|')) {
+                showError(data.slice(6));
+            } else {
+                addLogLine(data, data.includes('Saving'));
+            }
+        }
+
+        // ── Render report ─────────────────────────────────────────────────────
+
+        function renderReport(report) {
+            currentReportId = report.report_id;
+            const ld = report.lead_data || {};
+
+            document.title = `${report.company_name} — Deep Dive — Tre Borden /Co`;
+
+            // Company name
+            document.getElementById('reportCompanyName').textContent = report.company_name || '';
+
+            // ICP badge
+            const score = ld.icp_score;
+            if (score != null) {
+                const badge = document.getElementById('reportIcpBadge');
+                badge.textContent = `ICP ${score}`;
+                badge.className = 'badge badge-icp ' + (score >= 8 ? 'high' : score >= 6 ? 'mid' : '');
+                badge.style.display = 'inline-block';
+            }
+
+            // Meta line
+            const metaParts = [ld.type, ld.location, report.geographic_area].filter(Boolean);
+            document.getElementById('reportMeta').textContent = metaParts.join(' · ');
+
+            // Estimated budget
+            if (ld.estimated_budget) {
+                document.getElementById('reportBudget').textContent = ld.estimated_budget;
+                document.getElementById('reportBudgetWrap').style.display = 'block';
+            }
+
+            // Why a lead
+            document.getElementById('reportWhyALead').textContent = ld.why_a_lead || '';
+
+            // Report date
+            if (report.created_at) {
+                try {
+                    const d = new Date(report.created_at);
+                    document.getElementById('reportDate').textContent =
+                        'Report generated ' + d.toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'long', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        });
+                } catch(e) {}
+            }
+
+            // Sections
+            const sectionsEl = document.getElementById('reportSections');
+            sectionsEl.innerHTML = '';
+            for (const { key, title } of SECTIONS) {
+                const section = (report.report_sections || {})[key] || {};
+                sectionsEl.appendChild(buildSectionBlock(title, section));
+            }
+
+            // Flip visibility
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('reportContent').style.display = 'block';
+        }
+
+        function buildSectionBlock(title, section) {
+            const completeness = section.completeness || 'Limited';
+            const findings = section.findings || 'No information found for this section.';
+            const sources = Array.isArray(section.sources) ? section.sources : [];
+
+            const block = document.createElement('div');
+            block.className = 'section-block' + (completeness === 'Limited' ? ' limited' : '');
+
+            // Header
+            const header = document.createElement('div');
+            header.className = 'section-block-header';
+
+            const titleEl = document.createElement('span');
+            titleEl.className = 'section-block-title';
+            titleEl.textContent = title;
+
+            const badge = document.createElement('span');
+            badge.className = 'completeness-badge completeness-' + completeness.toLowerCase();
+            badge.textContent = completeness;
+
+            header.appendChild(titleEl);
+            header.appendChild(badge);
+            block.appendChild(header);
+
+            // Findings
+            const findingsEl = document.createElement('p');
+            findingsEl.className = 'section-findings';
+            findingsEl.textContent = findings;
+            block.appendChild(findingsEl);
+
+            // Sources
+            const validSources = sources.filter(url => {
+                try {
+                    const u = new URL(url);
+                    return u.protocol === 'http:' || u.protocol === 'https:';
+                } catch { return false; }
+            });
+
+            if (validSources.length > 0) {
+                const sourcesList = document.createElement('div');
+                sourcesList.className = 'sources-list';
+
+                const label = document.createElement('div');
+                label.className = 'sources-label';
+                label.textContent = 'Sources';
+                sourcesList.appendChild(label);
+
+                validSources.forEach(url => {
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.textContent = url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.className = 'source-link';
+                    sourcesList.appendChild(link);
+                });
+
+                block.appendChild(sourcesList);
+            }
+
+            return block;
+        }
+
+        // ── Save to spreadsheet ───────────────────────────────────────────────
+
+        async function saveToSpreadsheet() {
+            if (!currentReportId) return;
+
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const r = await fetch('/deep-dive/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ report_id: currentReportId }),
+                });
+
+                const data = await r.json();
+
+                if (r.ok) {
+                    btn.textContent = 'Saved to Spreadsheet ✓';
+                    btn.classList.add('saved');
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Failed — Try Again';
+                    console.error(data.error);
+                }
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Save Failed — Try Again';
+            }
+        }
+    </script>
+</body>
+</html>

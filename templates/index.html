@@ -330,6 +330,42 @@
             margin: 40px 0 16px;
         }
 
+        /* ── Deep Dive Button ── */
+        .lead-actions {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .deep-dive-btn {
+            padding: 7px 20px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1.5px solid var(--black);
+            background: transparent;
+            color: var(--black);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .deep-dive-btn:hover {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .deep-dive-note {
+            font-size: 12px;
+            color: var(--gray-text);
+            font-style: italic;
+        }
+
+        .previous-lead .deep-dive-btn {
+            border-color: currentColor;
+        }
+
         /* ── Download ── */
         .download-btn {
             display: inline-block;
@@ -449,6 +485,8 @@
     <script>
         let selectedSegment = "corporate";
         const MAX_RETRIES = 2;
+        let _leadCacheId = 0;
+        const _leadCache = {};
 
         function selectSegment(btn) {
             document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
@@ -456,7 +494,17 @@
             selectedSegment = btn.dataset.segment;
         }
 
+        function startDeepDive(key) {
+            const lead = _leadCache[key];
+            if (!lead) return;
+            localStorage.setItem('pendingDeepDive', JSON.stringify(lead));
+            window.location.href = '/report';
+        }
+
         function renderLeadCard(lead, isNew) {
+            const key = 'lead_' + (++_leadCacheId);
+            _leadCache[key] = lead;
+
             const score = lead.icp_score || 0;
             const icpClass = score >= 8 ? "high" : score >= 6 ? "mid" : "";
             const cardClass = isNew ? "lead-card new-lead" : "lead-card previous-lead";
@@ -472,6 +520,10 @@
                     </div>
                     <div class="lead-meta">${lead.type} — ${lead.location}${dateLine}</div>
                     <div class="lead-why">${lead.why_a_lead}</div>
+                    <div class="lead-actions">
+                        <button class="deep-dive-btn" onclick="startDeepDive('${key}')">Deep Dive →</button>
+                        <span class="deep-dive-note">Runs an additional AI search</span>
+                    </div>
                 </div>
             `;
         }
