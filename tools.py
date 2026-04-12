@@ -21,6 +21,7 @@ COLUMN_WIDTHS = {
     "M": 22,    # Project Stage
     "N": 55,    # Notes
     "O": 14,    # Date Found
+    "P": 35,    # Lead Source
 }
 
 HEADERS = [
@@ -38,7 +39,8 @@ HEADERS = [
     "Budget Confidence",
     "Project Stage",
     "Notes",
-    "Date Found"
+    "Date Found",
+    "Lead Source",
 ]
 
 TABLE_NAMES = {
@@ -147,7 +149,8 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
                 "budget_confidence": row[11] or "",
                 "project_stage": row[12] or "" if len(row) > 12 else "",
                 "notes": row[13] or "" if len(row) > 13 else "",
-                "date_found": str(row[14]) if len(row) > 14 and row[14] else ""
+                "date_found": str(row[14]) if len(row) > 14 and row[14] else "",
+                "lead_source": row[15] or "" if len(row) > 15 else "",
             })
     return leads
 
@@ -161,12 +164,12 @@ DEEP_DIVE_HEADERS = [
 ]
 
 DEEP_DIVE_COLUMN_WIDTHS = {
-    "P": 60,  # Project Status
-    "Q": 60,  # News Summary
-    "R": 60,  # Existing Art Attachments
-    "S": 60,  # Key Principals
-    "T": 60,  # Commissioning History
-    "U": 14,  # Deep Dive Date
+    "Q": 60,  # Project Status
+    "R": 60,  # News Summary
+    "S": 60,  # Existing Art Attachments
+    "T": 60,  # Key Principals
+    "U": 60,  # Commissioning History
+    "V": 14,  # Deep Dive Date
 }
 
 def _apply_table_formatting(sheet, sheet_name, max_col=None):
@@ -254,7 +257,8 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
                 lead.get("budget_confidence", ""),
                 lead.get("project_stage", ""),
                 lead.get("notes", ""),
-                today
+                today,
+                lead.get("lead_source", "Web Search"),
             ]
             sheet.append(row)
             saved_count += 1

@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from prompts import get_system_prompt
+from prompts import get_system_prompt, get_la_permitting_system_prompt
 from tools import (
     save_leads_to_spreadsheet,
     get_existing_leads_for_segment,
@@ -54,6 +54,7 @@ TOOLS = [
                             "budget_basis": {"type": "string"},
                             "budget_confidence": {"type": "string"},
                             "project_stage": {"type": "string"},
+                            "lead_source": {"type": "string"},
                             "notes": {"type": "string"}
                         }
                     }
@@ -139,6 +140,66 @@ and which artists or consultants were engaged.
 When you have finished all research, call save_deep_dive_report with your structured findings."""
 
 
+# ── Agent loop helper ─────────────────────────────────────────────────────────
+
+def _collect_leads(client, system_prompt, tools, user_message):
+    """
+    Generator that runs an agent loop until save_leads_to_spreadsheet is called.
+    Yields plain status strings (caller wraps in SSE format).
+    Returns the collected leads list via StopIteration.value — use:
+
+        gen = _collect_leads(...)
+        try:
+            while True: yield f"data: {next(gen)}\\n\\n"
+        except StopIteration as exc:
+            leads = exc.value or []
+    """
+    messages = [{"role": "user", "content": user_message}]
+    max_iterations = 20
+    iteration = 0
+
+    while True:
+        iteration += 1
+        if iteration > max_iterations:
+            yield "Search loop safety limit reached."
+            return []
+
+        while True:
+            try:
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=system_prompt,
+                    tools=tools,
+                    messages=messages
+                )
+                break
+            except anthropic.RateLimitError:
+                yield "Rate limit hit, waiting 60 seconds..."
+                for i in range(12):
+                    time.sleep(5)
+                    yield f"Waiting... ({(i+1)*5}s)"
+                yield "Retrying..."
+            except Exception as e:
+                yield f"ERROR: {type(e).__name__}: {str(e)}"
+                return []
+
+        messages.append({"role": "assistant", "content": response.content})
+
+        if response.stop_reason == "end_turn":
+            for block in response.content:
+                if hasattr(block, "text"):
+                    yield block.text
+            return []
+
+        elif response.stop_reason == "tool_use":
+            for block in response.content:
+                if block.type == "tool_use":
+                    if block.name == "save_leads_to_spreadsheet":
+                        return block.input.get("leads", [])
+                    # Do NOT handle web_search — it's a server-side tool.
+
+
 # ── Existing routes ───────────────────────────────────────────────────────────
 
 @app.route("/health")
@@ -164,8 +225,6 @@ def run():
 
     def generate():
         client = anthropic.Anthropic()
-        messages = []
-        saved_leads = []
 
         budget_instruction = (
             f" Prioritize leads whose estimated art commissioning budget is likely to fall within {budget}."
@@ -217,79 +276,88 @@ def run():
             )
 
         existing = get_existing_leads_for_segment(segment)
-        system_prompt = get_system_prompt(segment, existing if existing else None)
+        existing_names = existing if existing else None
+        system_prompt = get_system_prompt(segment, existing_names)
 
-        yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
-        messages.append({"role": "user", "content": user_message})
+        is_la_enhanced = (
+            geography == "Greater Los Angeles Area"
+            and project_stage == "Early Stage (Pre-Construction)"
+        )
 
-        max_iterations = 20
-        iteration = 0
+        if is_la_enhanced:
+            # ── Enhanced path: two separate API calls, merged results ──────────
+            yield "data: Starting enhanced LA early-stage search...\n\n"
+            yield "data: Phase 1 of 2: General early-stage search...\n\n"
 
-        while True:
-            iteration += 1
-            if iteration > max_iterations:
-                yield "data: Search loop safety limit reached.\n\n"
-                yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
-                return
+            gen = _collect_leads(client, system_prompt, TOOLS, user_message)
+            try:
+                while True:
+                    yield f"data: {next(gen)}\n\n"
+            except StopIteration as exc:
+                main_leads = exc.value or []
 
-            while True:
-                try:
-                    response = client.messages.create(
-                        model="claude-sonnet-4-6",
-                        max_tokens=4096,
-                        system=system_prompt,
-                        tools=TOOLS,
-                        messages=messages
-                    )
-                    break
-                except anthropic.RateLimitError:
-                    yield "data: Rate limit hit, waiting 60 seconds...\n\n"
-                    for i in range(12):
-                        time.sleep(5)
-                        yield f"data: Waiting... ({(i+1)*5}s)\n\n"
-                    yield "data: Retrying...\n\n"
-                except Exception as e:
-                    yield f"data: ERROR: {type(e).__name__}: {str(e)}\n\n"
-                    return
+            for lead in main_leads:
+                lead.setdefault("lead_source", "Web Search")
 
-            messages.append({"role": "assistant", "content": response.content})
+            yield "data: Phase 2 of 2: LA permitting data search...\n\n"
 
-            if response.stop_reason == "end_turn":
-                for block in response.content:
-                    if hasattr(block, "text"):
-                        yield f"data: {block.text}\n\n"
-                yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
-                break
+            la_existing = list(existing_names or []) + [
+                l.get("company_name", "") for l in main_leads
+            ]
+            la_system_prompt = get_la_permitting_system_prompt(la_existing if la_existing else None)
+            la_user_message = (
+                "Search these specific Los Angeles municipal sources for early-stage development "
+                "projects that are strong candidates for art commissioning by Tre Borden /Co. "
+                "Focus on private developments with permit valuations above $5M and public capital "
+                "projects with percent-for-art requirements. Use all 5 searches on municipal sources."
+            )
 
-            elif response.stop_reason == "tool_use":
-                tool_results = []
+            gen = _collect_leads(client, la_system_prompt, TOOLS, la_user_message)
+            try:
+                while True:
+                    yield f"data: {next(gen)}\n\n"
+            except StopIteration as exc:
+                la_leads = exc.value or []
 
-                for block in response.content:
-                    if block.type == "tool_use":
-                        if block.name == "save_leads_to_spreadsheet":
-                            yield "data: Saving leads to spreadsheet...\n\n"
-                            try:
-                                result, actually_saved = save_leads_to_spreadsheet(block.input.get("leads", []), segment)
-                                saved_leads = actually_saved
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": result
-                                })
-                            except Exception as e:
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": f"Error saving leads: {str(e)}",
-                                    "is_error": True
-                                })
-                            # Early return to avoid Railway timeout
-                            yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
-                            return
-                        # Do NOT handle web_search here — it's a server-side tool.
+            # Merge: main leads first, then LA leads not already in main set
+            main_names = {l.get("company_name", "").strip().lower() for l in main_leads}
+            for lead in la_leads:
+                name = lead.get("company_name", "").strip().lower()
+                if name and name not in main_names:
+                    main_leads.append(lead)
+                    main_names.add(name)
 
-                if tool_results:
-                    messages.append({"role": "user", "content": tool_results})
+            yield "data: Saving leads to spreadsheet...\n\n"
+            try:
+                result, actually_saved = save_leads_to_spreadsheet(main_leads, segment)
+                yield f"data: DONE|{json.dumps(actually_saved)}\n\n"
+            except Exception as e:
+                yield f"data: Error saving leads: {e}\n\n"
+                yield "data: DONE|[]\n\n"
+            return
+
+        else:
+            # ── Standard path ─────────────────────────────────────────────────
+            yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
+
+            gen = _collect_leads(client, system_prompt, TOOLS, user_message)
+            try:
+                while True:
+                    yield f"data: {next(gen)}\n\n"
+            except StopIteration as exc:
+                leads = exc.value or []
+
+            for lead in leads:
+                lead.setdefault("lead_source", "Web Search")
+
+            yield "data: Saving leads to spreadsheet...\n\n"
+            try:
+                result, actually_saved = save_leads_to_spreadsheet(leads, segment)
+                yield f"data: DONE|{json.dumps(actually_saved)}\n\n"
+            except Exception as e:
+                yield f"data: Error saving leads: {e}\n\n"
+                yield "data: DONE|[]\n\n"
+            return
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
