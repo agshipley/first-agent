@@ -268,6 +268,8 @@ def run():
 @app.route("/download")
 def download():
     filepath = os.path.join(DATA_DIR, "leads.xlsx")
+    if not os.path.exists(filepath):
+        return "No spreadsheet found yet.", 404
     return send_file(
         filepath,
         as_attachment=True,
@@ -450,6 +452,10 @@ def deep_dive_save():
         report = json.load(f)
 
     message = save_deep_dive_to_spreadsheet(report)
+    if message.startswith("Lead '") and "not found" in message:
+        return jsonify({"error": message}), 404
+    if message.startswith("leads.xlsx not found"):
+        return jsonify({"error": message}), 404
     return jsonify({"message": message})
 
 

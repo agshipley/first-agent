@@ -58,3 +58,21 @@ Leads stored in `leads.xlsx` with columns: `Company Name | Type | Location | Why
 - ICP scoring: 1–10 scale with different rubrics per segment; public sector rejects expired RFP deadlines
 - The `web_search` tool is a built-in Anthropic server-side tool — it cannot be called directly from client code
 - SSE streaming in `/run` uses `flask.Response` with `text/event-stream` content type
+
+## Developer Preferences
+
+- Provide complete, working files — not fragments or partial diffs
+- Be honest about what's done vs. what's untested
+- Correct technical terminology when used imprecisely — this is a learning project
+- No filler or speculation — provide the fix, or say you don't know
+- Be cost-conscious — suggest zero-cost testing (fake data, local-only) whenever possible
+- Think through implications before proposing changes to production code
+
+## Lessons Learned
+
+- web_search is a server-side tool — never intercept it or send tool_result for it
+- Railway auto-deploys from main on git push
+- Port 5000 is occupied by AirPlay Receiver on macOS — use PORT=5001 for local testing
+- Use test_formatting.py with fake data to test spreadsheet changes without API cost
+- Back-to-back search runs can trigger rate limiting — space them out
+- The early return after save_leads_to_spreadsheet in app.py is intentional to avoid Railway's connection timeout — do not remove it

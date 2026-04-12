@@ -17,8 +17,6 @@
             --gray-light: #e0e0e0;
             --gray-bg: #F2F0EC;
             --white: #ffffff;
-            --green: #2d6a4f;
-            --green-bg: #d8f3dc;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -72,12 +70,21 @@
         .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
 
         .main {
-            max-width: 1200px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 48px 48px 80px;
         }
 
-        /* ── Shared badge styles ── */
+        /* ── Shared ── */
+        .section-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--gray-text);
+            margin-bottom: 12px;
+        }
+
         .badge {
             display: inline-block;
             padding: 3px 12px;
@@ -96,12 +103,11 @@
         .back-link {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
             font-size: 14px;
             font-weight: 500;
             color: var(--gray-text);
             text-decoration: none;
-            margin-bottom: 36px;
+            margin-bottom: 40px;
             transition: color 0.2s;
         }
 
@@ -110,9 +116,7 @@
         /* ── Loading state ── */
         #loadingState { max-width: 680px; }
 
-        .page-title {
-            margin-bottom: 32px;
-        }
+        .page-title { margin-bottom: 32px; }
 
         .page-title .prefix {
             font-size: 28px;
@@ -121,30 +125,13 @@
             font-style: italic;
         }
 
-        .page-title .title {
-            font-size: 28px;
-            font-weight: 700;
-        }
-
-        .loading-company {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
+        .page-title .title { font-size: 28px; font-weight: 700; }
 
         .loading-sub {
             font-size: 14px;
             color: var(--gray-text);
             margin-bottom: 28px;
-        }
-
-        .section-label {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: var(--gray-text);
-            margin-bottom: 12px;
+            line-height: 1.6;
         }
 
         #log {
@@ -163,9 +150,9 @@
 
         .spinner {
             display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(26,26,26,0.2);
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(26,26,26,0.15);
             border-top-color: var(--black);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -189,6 +176,10 @@
         #reportContent { display: none; }
 
         /* Company header */
+        .report-document-label {
+            margin-bottom: 24px;
+        }
+
         .report-company-header {
             margin-bottom: 48px;
             padding-bottom: 40px;
@@ -209,7 +200,7 @@
         .report-meta {
             font-size: 15px;
             color: var(--gray-text);
-            margin-bottom: 8px;
+            margin-bottom: 24px;
         }
 
         .report-budget-wrap {
@@ -231,34 +222,49 @@
             font-weight: 600;
         }
 
+        .report-budget-confidence {
+            font-size: 12px;
+            color: var(--gray-text);
+            margin-left: 6px;
+        }
+
+        .why-lead-label {
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+
         .report-why-block {
             background: var(--gray-bg);
             border-left: 3px solid var(--pink-dark);
             border-radius: 0 4px 4px 0;
             padding: 16px 20px;
             font-size: 15px;
-            line-height: 1.65;
+            line-height: 1.7;
             color: var(--black);
-            max-width: 760px;
-            margin-bottom: 16px;
         }
 
         .report-date-line {
             font-size: 13px;
             color: var(--gray-text);
-            margin-top: 12px;
+            margin-top: 20px;
         }
 
-        /* Section blocks */
+        /* ── Section blocks ── */
         .report-sections { margin-bottom: 48px; }
 
         .section-block {
             background: var(--white);
             border: 1px solid var(--gray-light);
+            border-left-width: 3px;
             border-radius: 6px;
             padding: 28px 32px;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
+
+        /* Left accent by completeness — communicates quality at a glance */
+        .section-block.comprehensive { border-left-color: var(--black); }
+        .section-block.partial       { border-left-color: var(--pink-dark); }
+        .section-block.limited       { border-left-color: var(--gray-light); }
 
         .section-block-header {
             display: flex;
@@ -269,14 +275,13 @@
         }
 
         .section-block-title {
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 700;
-            letter-spacing: 0.3px;
+            letter-spacing: 2px;
             text-transform: uppercase;
             color: var(--black);
         }
 
-        /* Completeness badges */
         .completeness-badge {
             flex-shrink: 0;
             display: inline-block;
@@ -289,26 +294,14 @@
             white-space: nowrap;
         }
 
-        .completeness-comprehensive {
-            background: var(--black);
-            color: var(--white);
-        }
-
-        .completeness-partial {
-            background: var(--pink);
-            color: var(--black);
-        }
-
-        .completeness-limited {
-            background: var(--gray-bg);
-            color: var(--gray-text);
-        }
+        .completeness-comprehensive { background: var(--black);   color: var(--white); }
+        .completeness-partial       { background: var(--pink);    color: var(--black); }
+        .completeness-limited       { background: var(--gray-bg); color: var(--gray-text); }
 
         .section-findings {
             font-size: 15px;
-            line-height: 1.75;
+            line-height: 1.8;
             color: var(--black);
-            margin-bottom: 0;
         }
 
         .section-block.limited .section-findings {
@@ -333,16 +326,20 @@
         }
 
         .source-link {
-            display: block;
+            display: inline-block;
             font-size: 13px;
             color: var(--gray-text);
             text-decoration: none;
-            word-break: break-all;
-            padding: 3px 0;
+            padding: 2px 0;
+            margin-right: 16px;
             transition: color 0.15s;
+            border-bottom: 1px solid transparent;
         }
 
-        .source-link:hover { color: var(--black); text-decoration: underline; }
+        .source-link:hover {
+            color: var(--black);
+            border-bottom-color: var(--black);
+        }
 
         /* Actions bar */
         .report-actions {
@@ -374,6 +371,11 @@
             border-color: var(--black);
             color: var(--white);
         }
+        .save-btn.error {
+            border-color: var(--gray-text);
+            background: transparent;
+            color: var(--gray-text);
+        }
 
         /* ── Responsive ── */
         @media (max-width: 640px) {
@@ -381,7 +383,7 @@
             .nav-links { gap: 24px; }
             .divider { padding: 0 24px; }
             .main { padding: 32px 24px 60px; }
-            .report-company-name { font-size: 28px; }
+            .report-company-name { font-size: 26px; }
             .section-block { padding: 20px; }
             .section-block-header { flex-direction: column; gap: 8px; }
         }
@@ -419,22 +421,29 @@
                 <span class="prefix">Tools / </span><span class="title">Deep Dive</span>
             </div>
             <p class="error-message" id="errorMessage"></p>
+            <a href="/reports" class="back-link" style="margin-bottom:0">← Back to Reports</a>
         </div>
 
         <!-- Report content -->
         <div id="reportContent">
 
             <div class="report-company-header">
+                <div class="section-label report-document-label">Deep Dive Report</div>
                 <div class="report-company-name">
                     <span id="reportCompanyName"></span>
                     <span class="badge badge-icp" id="reportIcpBadge" style="display:none"></span>
                 </div>
                 <div class="report-meta" id="reportMeta"></div>
+
                 <div class="report-budget-wrap" id="reportBudgetWrap">
                     <span class="report-budget-label">Est. Budget</span>
                     <span class="report-budget-value" id="reportBudget"></span>
+                    <span class="report-budget-confidence" id="reportBudgetConfidence"></span>
                 </div>
+
+                <div class="section-label why-lead-label">Why This Lead</div>
                 <div class="report-why-block" id="reportWhyALead"></div>
+
                 <div class="report-date-line" id="reportDate"></div>
             </div>
 
@@ -442,7 +451,7 @@
 
             <div class="report-actions">
                 <button class="save-btn" id="saveBtn" onclick="saveToSpreadsheet()">Save to Spreadsheet</button>
-                <a href="/" class="back-link" style="margin-bottom:0">← Back to Lead Finder</a>
+                <a href="/reports" class="back-link" style="margin-bottom:0">← Back to Reports</a>
             </div>
 
         </div>
@@ -509,6 +518,8 @@
                 const r = await fetch(`/api/reports/${encodeURIComponent(reportId)}`);
                 if (!r.ok) throw new Error('Report not found.');
                 const report = await r.json();
+                // Update loading title before render in case there's a visible flash
+                document.getElementById('loadingCompanyName').textContent = report.company_name || '...';
                 renderReport(report);
             } catch (err) {
                 showError(err.message || 'Could not load report.');
@@ -518,42 +529,49 @@
         // ── Run deep dive via POST + ReadableStream ───────────────────────────
 
         async function runDeepDive(leadData) {
+            // 3-minute hard timeout — prevents infinite spinner if stream dies mid-flight
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Request timed out. Please try again.')), 3 * 60 * 1000)
+            );
+
             try {
-                const response = await fetch('/deep-dive', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(leadData),
-                });
-
-                if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = '';
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
-
-                    // SSE events are separated by \n\n
-                    const parts = buffer.split('\n\n');
-                    buffer = parts.pop(); // last part may be incomplete
-
-                    for (const part of parts) {
-                        for (const line of part.split('\n')) {
-                            if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
-                        }
-                    }
-                }
-
-                // Drain any remaining buffer
-                for (const line of buffer.split('\n')) {
-                    if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
-                }
-
+                await Promise.race([streamDeepDive(leadData), timeout]);
             } catch (err) {
                 showError('Deep dive failed: ' + err.message);
+            }
+        }
+
+        async function streamDeepDive(leadData) {
+            const response = await fetch('/deep-dive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(leadData),
+            });
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop();
+
+                for (const part of parts) {
+                    for (const line of part.split('\n')) {
+                        if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
+                    }
+                }
+            }
+
+            // Drain remaining buffer
+            for (const line of buffer.split('\n')) {
+                if (line.startsWith('data: ')) handleStreamEvent(line.slice(6));
             }
         }
 
@@ -578,7 +596,6 @@
 
             document.title = `${report.company_name} — Deep Dive — Tre Borden /Co`;
 
-            // Company name
             document.getElementById('reportCompanyName').textContent = report.company_name || '';
 
             // ICP badge
@@ -594,9 +611,13 @@
             const metaParts = [ld.type, ld.location, report.geographic_area].filter(Boolean);
             document.getElementById('reportMeta').textContent = metaParts.join(' · ');
 
-            // Estimated budget
+            // Budget with confidence
             if (ld.estimated_budget) {
                 document.getElementById('reportBudget').textContent = ld.estimated_budget;
+                if (ld.budget_confidence) {
+                    document.getElementById('reportBudgetConfidence').textContent =
+                        `· ${ld.budget_confidence} confidence`;
+                }
                 document.getElementById('reportBudgetWrap').style.display = 'block';
             }
 
@@ -623,7 +644,6 @@
                 sectionsEl.appendChild(buildSectionBlock(title, section));
             }
 
-            // Flip visibility
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('reportContent').style.display = 'block';
         }
@@ -634,7 +654,7 @@
             const sources = Array.isArray(section.sources) ? section.sources : [];
 
             const block = document.createElement('div');
-            block.className = 'section-block' + (completeness === 'Limited' ? ' limited' : '');
+            block.className = `section-block ${completeness.toLowerCase()}`;
 
             // Header
             const header = document.createElement('div');
@@ -645,7 +665,7 @@
             titleEl.textContent = title;
 
             const badge = document.createElement('span');
-            badge.className = 'completeness-badge completeness-' + completeness.toLowerCase();
+            badge.className = `completeness-badge completeness-${completeness.toLowerCase()}`;
             badge.textContent = completeness;
 
             header.appendChild(titleEl);
@@ -658,7 +678,7 @@
             findingsEl.textContent = findings;
             block.appendChild(findingsEl);
 
-            // Sources
+            // Sources — validate URL scheme, display hostname only
             const validSources = sources.filter(url => {
                 try {
                     const u = new URL(url);
@@ -675,16 +695,24 @@
                 label.textContent = 'Sources';
                 sourcesList.appendChild(label);
 
+                const linksWrap = document.createElement('div');
                 validSources.forEach(url => {
+                    let displayText;
+                    try {
+                        displayText = new URL(url).hostname.replace(/^www\./, '');
+                    } catch {
+                        displayText = url;
+                    }
                     const link = document.createElement('a');
                     link.href = url;
-                    link.textContent = url;
+                    link.textContent = displayText;
+                    link.title = url;     // full URL on hover
                     link.target = '_blank';
                     link.rel = 'noopener noreferrer';
                     link.className = 'source-link';
-                    sourcesList.appendChild(link);
+                    linksWrap.appendChild(link);
                 });
-
+                sourcesList.appendChild(linksWrap);
                 block.appendChild(sourcesList);
             }
 
@@ -699,6 +727,7 @@
             const btn = document.getElementById('saveBtn');
             btn.disabled = true;
             btn.textContent = 'Saving...';
+            btn.classList.remove('saved', 'error');
 
             try {
                 const r = await fetch('/deep-dive/save', {
@@ -714,12 +743,13 @@
                     btn.classList.add('saved');
                 } else {
                     btn.disabled = false;
-                    btn.textContent = 'Save Failed — Try Again';
-                    console.error(data.error);
+                    btn.textContent = data.error || 'Save Failed — Try Again';
+                    btn.classList.add('error');
                 }
             } catch (err) {
                 btn.disabled = false;
                 btn.textContent = 'Save Failed — Try Again';
+                btn.classList.add('error');
             }
         }
     </script>
