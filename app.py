@@ -393,7 +393,12 @@ def deep_dive():
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
 
-@app.route("/reports", methods=["GET"])
+@app.route("/reports")
+def reports_archive():
+    return render_template("reports.html")
+
+
+@app.route("/api/reports", methods=["GET"])
 def list_reports():
     reports = []
     try:
@@ -418,7 +423,7 @@ def list_reports():
     return jsonify(reports)
 
 
-@app.route("/reports/<report_id>", methods=["GET"])
+@app.route("/api/reports/<report_id>", methods=["GET"])
 def get_report(report_id):
     # Sanitise the report_id to prevent path traversal
     safe_id = os.path.basename(report_id)

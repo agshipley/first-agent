@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports — Tre Borden /Co</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #FAF8F4;
+            --black: #1a1a1a;
+            --pink: #F2C4DE;
+            --pink-dark: #E8A8CC;
+            --gray-text: #666;
+            --gray-light: #e0e0e0;
+            --gray-bg: #F2F0EC;
+            --white: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            color: var(--black);
+            min-height: 100vh;
+        }
+
+        .site-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 32px 48px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .logo span { color: var(--pink-dark); }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            font-size: 15px;
+            font-weight: 400;
+            padding-top: 4px;
+        }
+
+        .nav-links a {
+            color: var(--black);
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .nav-links a:hover { opacity: 0.6; }
+        .nav-links a.active { font-weight: 700; }
+
+        .divider { max-width: 1200px; margin: 0 auto; padding: 0 48px; }
+        .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
+
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 48px 80px;
+        }
+
+        .page-title {
+            margin-bottom: 48px;
+        }
+
+        .page-title .prefix {
+            font-size: 28px;
+            font-weight: 400;
+            color: var(--pink-dark);
+            font-style: italic;
+        }
+
+        .page-title .title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        /* ── Loading / empty ── */
+        .status-text {
+            font-size: 15px;
+            color: var(--gray-text);
+            line-height: 1.7;
+        }
+
+        .empty-state {
+            display: none;
+            padding: 48px 0;
+            max-width: 520px;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            color: var(--gray-text);
+            line-height: 1.7;
+            margin-bottom: 24px;
+        }
+
+        /* ── Report list ── */
+        #reportsList { display: none; }
+
+        .report-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 22px 0;
+            border-bottom: 1px solid var(--gray-light);
+        }
+
+        .report-row:first-child {
+            border-top: 1px solid var(--gray-light);
+        }
+
+        .report-row-main {
+            min-width: 0;
+        }
+
+        .report-row-company {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .report-row-meta {
+            font-size: 14px;
+            color: var(--gray-text);
+        }
+
+        .view-btn {
+            flex-shrink: 0;
+            padding: 8px 22px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1.5px solid var(--black);
+            background: transparent;
+            color: var(--black);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .view-btn:hover {
+            background: var(--black);
+            color: var(--white);
+        }
+
+        /* ── Find leads link ── */
+        .find-leads-link {
+            display: inline-block;
+            padding: 12px 32px;
+            border-radius: 50px;
+            background: var(--pink);
+            border: 2px solid var(--pink-dark);
+            color: var(--black);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .find-leads-link:hover { background: var(--pink-dark); }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .site-header { padding: 24px; flex-direction: column; gap: 20px; }
+            .nav-links { gap: 24px; }
+            .divider { padding: 0 24px; }
+            .main { padding: 32px 24px 60px; }
+            .report-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .view-btn { align-self: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="site-header">
+        <a href="https://www.treborden.com" class="logo">TRE<br>BORDEN<br><span>/</span>CO</a>
+        <nav class="nav-links">
+            <a href="/reports" class="active">Reports /</a>
+            <a href="https://www.treborden.com/spaces">Our Work /</a>
+            <a href="https://www.treborden.com/about_us">About Us /</a>
+        </nav>
+    </header>
+
+    <div class="divider"><hr></div>
+
+    <main class="main">
+        <div class="page-title">
+            <span class="prefix">Tools / </span><span class="title">Deep Dive Reports</span>
+        </div>
+
+        <p id="loadingMsg" class="status-text">Loading reports...</p>
+
+        <div id="emptyState" class="empty-state">
+            <p>No deep dive reports yet. Run a search and click <strong>Deep Dive</strong> on any lead to get started.</p>
+            <a href="/" class="find-leads-link">Find Leads →</a>
+        </div>
+
+        <div id="reportsList"></div>
+    </main>
+
+    <script>
+        function formatDate(isoStr) {
+            try {
+                return new Date(isoStr).toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                });
+            } catch(e) { return ''; }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const r = await fetch('/api/reports');
+                if (!r.ok) throw new Error('Server error');
+                const reports = await r.json();
+                renderReports(reports);
+            } catch(err) {
+                document.getElementById('loadingMsg').textContent =
+                    'Could not load reports. Please try refreshing.';
+            }
+        });
+
+        function renderReports(reports) {
+            document.getElementById('loadingMsg').style.display = 'none';
+
+            if (reports.length === 0) {
+                document.getElementById('emptyState').style.display = 'block';
+                return;
+            }
+
+            const list = document.getElementById('reportsList');
+            list.style.display = 'block';
+
+            reports.forEach(report => {
+                const row = document.createElement('div');
+                row.className = 'report-row';
+
+                const main = document.createElement('div');
+                main.className = 'report-row-main';
+
+                const company = document.createElement('div');
+                company.className = 'report-row-company';
+                company.textContent = report.company_name || 'Unknown';
+
+                const meta = document.createElement('div');
+                meta.className = 'report-row-meta';
+                const parts = [report.geographic_area, formatDate(report.created_at)].filter(Boolean);
+                meta.textContent = parts.join(' · ');
+
+                main.appendChild(company);
+                main.appendChild(meta);
+
+                const link = document.createElement('a');
+                link.href = '/report?id=' + encodeURIComponent(report.report_id);
+                link.className = 'view-btn';
+                link.textContent = 'View Report →';
+
+                row.appendChild(main);
+                row.appendChild(link);
+                list.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
