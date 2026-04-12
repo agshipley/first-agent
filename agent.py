@@ -28,11 +28,17 @@ TOOLS = [
                             "company_name": {"type": "string"},
                             "type": {"type": "string"},
                             "location": {"type": "string"},
+                            "geographic_area": {"type": "string"},
                             "why_a_lead": {"type": "string"},
                             "company_website": {"type": "string"},
                             "source_url": {"type": "string"},
                             "potential_contact": {"type": "string"},
                             "icp_score": {"type": "number"},
+                            "estimated_budget": {"type": "string"},
+                            "budget_basis": {"type": "string"},
+                            "budget_confidence": {"type": "string"},
+                            "project_stage": {"type": "string"},
+                            "lead_source": {"type": "string"},
                             "notes": {"type": "string"}
                         }
                     }
@@ -111,7 +117,7 @@ def run_agent():
                     print(f"Using tool: {block.name}")
 
                     if block.name == "save_leads_to_spreadsheet":
-                        result, actually_saved = save_leads_to_spreadsheet(block.input["leads"], SEGMENT)
+                        result, actually_saved = save_leads_to_spreadsheet(block.input.get("leads", []), SEGMENT)
                         print(result)
                         tool_results.append({
                             "type": "tool_result",

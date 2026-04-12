@@ -147,10 +147,10 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
                 "estimated_budget": row[9] or "",
                 "budget_basis": row[10] or "",
                 "budget_confidence": row[11] or "",
-                "project_stage": row[12] or "" if len(row) > 12 else "",
-                "notes": row[13] or "" if len(row) > 13 else "",
+                "project_stage": (row[12] or "") if len(row) > 12 else "",
+                "notes": (row[13] or "") if len(row) > 13 else "",
                 "date_found": str(row[14]) if len(row) > 14 and row[14] else "",
-                "lead_source": row[15] or "" if len(row) > 15 else "",
+                "lead_source": (row[15] or "") if len(row) > 15 else "",
             })
     return leads
 
