@@ -9,19 +9,21 @@ COLUMN_WIDTHS = {
     "A": 25,    # Company Name
     "B": 18,    # Type
     "C": 28,    # Location
-    "D": 50,    # Why They're a Lead
-    "E": 30,    # Company Website
-    "F": 35,    # Source URL
-    "G": 30,    # Potential Contact
-    "H": 12,    # ICP Score
-    "I": 55,    # Notes
-    "J": 14,    # Date Found
+    "D": 24,    # Geographic Area
+    "E": 50,    # Why They're a Lead
+    "F": 30,    # Company Website
+    "G": 35,    # Source URL
+    "H": 30,    # Potential Contact
+    "I": 12,    # ICP Score
+    "J": 55,    # Notes
+    "K": 14,    # Date Found
 }
 
 HEADERS = [
     "Company Name",
     "Type",
     "Location",
+    "Geographic Area",
     "Why They're a Lead",
     "Company Website",
     "Source URL",
@@ -84,13 +86,14 @@ def get_all_leads_for_segment(segment: str) -> list[dict]:
                 "company_name": row[0] or "",
                 "type": row[1] or "",
                 "location": row[2] or "",
-                "why_a_lead": row[3] or "",
-                "company_website": row[4] or "",
-                "source_url": row[5] or "",
-                "potential_contact": row[6] or "",
-                "icp_score": row[7] or 0,
-                "notes": row[8] or "",
-                "date_found": str(row[9]) if len(row) > 9 and row[9] else ""
+                "geographic_area": row[3] or "",
+                "why_a_lead": row[4] or "",
+                "company_website": row[5] or "",
+                "source_url": row[6] or "",
+                "potential_contact": row[7] or "",
+                "icp_score": row[8] or 0,
+                "notes": row[9] or "",
+                "date_found": str(row[10]) if len(row) > 10 and row[10] else ""
             })
     return leads
 
@@ -166,6 +169,7 @@ def save_leads_to_spreadsheet(leads: list[dict], segment: str = "corporate") -> 
                 company_name,
                 lead.get("type", ""),
                 lead.get("location", ""),
+                lead.get("geographic_area", ""),
                 lead.get("why_a_lead", ""),
                 lead.get("company_website", ""),
                 lead.get("source_url", ""),

@@ -1,7 +1,7 @@
 import anthropic
 import time
-from datetime import date
 from dotenv import load_dotenv
+from prompts import get_system_prompt
 from tools import save_leads_to_spreadsheet, get_existing_leads_for_segment, get_all_leads_for_segment
 import json
 import os
@@ -10,82 +10,6 @@ from flask import Flask, render_template, request, Response, send_file, stream_w
 load_dotenv()
 
 app = Flask(__name__)
-
-def get_system_prompts():
-    today = date.today().strftime("%B %d, %Y")
-    return {
-        "corporate": """You are a business development researcher for Tre Borden /Co, a creative studio 
-and production company based in Los Angeles that curates and commissions art for corporate spaces.
-
-Their ideal clients are:
-- Real estate developers building or renovating commercial/corporate spaces in LA and surrounding areas
-- Architecture and interior design firms working on corporate office projects
-- Large companies announcing new headquarters, office relocations, or major renovations
-- Property management companies with large commercial portfolios in the LA region
-
-When searching for leads, look for signals like:
-- New office construction or renovation announcements
-- Companies relocating or expanding their LA presence
-- Architecture firms winning corporate office contracts
-- Real estate developers launching new commercial projects
-- Requests for proposals (RFPs) related to corporate art programs
-
-For each lead you find, extract:
-- company_name: the clean canonical name of the company only — no parentheticals, 
-  no office locations, no legal suffixes like LLP or Inc. Save descriptive detail 
-  to the notes field instead. Example: "Gensler" not "Gensler (Los Angeles Office)"
-- type: one of "Developer", "Architecture Firm", or "Corporate Client"
-- location: city and state
-- why_a_lead: specific reason this company is a good lead (be concrete - mention the specific project or announcement)
-- company_website: their main website URL
-- source_url: the specific URL where the information on which the good lead determination is based is located
-- potential_contact: name and title of the most relevant person if findable, otherwise ""
-- icp_score: a number from 1-10 based on the following rubric:
-    1-3: relevant company type but no specific trigger — no expansion, renovation, or project announcement
-    4-6: active trigger exists (expansion, relocation, renovation) but no evidence of art investment or creative design culture
-    7-9: active trigger plus evidence of design investment — past art commissions, design-forward reputation, creative workplace culture
-    10: active trigger, strong design culture, and something highly specific — open RFP, direct connection to Tre Borden's past clients, or project at exactly the right commissioning stage
-- notes: anything else relevant
-
-Only include leads you are confident are genuinely relevant. Quality over quantity.
-
-When you have found and evaluated leads, call the save_leads_to_spreadsheet function with your findings.""",
-
-        "public_sector": f"""You are a business development researcher for Tre Borden /Co, a creative studio 
-and production company based in Los Angeles that curates and commissions art for public and institutional spaces.
-
-Their ideal public sector clients are:
-- Municipal and government agencies in the LA region with active construction, renovation, or facility projects
-- Public infrastructure projects — transit authorities, libraries, civic buildings, public plazas
-- Universities and institutional campuses with capital projects underway
-- Any public entity subject to percent-for-art requirements on projects over $100k
-
-When searching for leads, prioritize:
-- Active RFPs or calls for artists with confirmed budgets over $100k and deadlines that have not yet passed — explicitly discard any RFP or opportunity with a deadline prior to today's date
-- Announced public construction or renovation projects where percent-for-art likely applies
-- Government agencies or universities relocating or expanding
-
-For each lead you find, extract:
-- company_name: the clean canonical name of the organization only — no parentheticals or department suffixes
-- type: one of "Municipal Agency", "Transit Authority", "University", or "Public Infrastructure"
-- location: city and state
-- why_a_lead: specific reason this is a good lead — name the specific project, RFP, or announcement
-- company_website: their main website URL
-- source_url: the specific URL where the information on which the good lead determination is based is located
-- potential_contact: name and title of the most relevant person if findable, otherwise ""
-- icp_score: a number from 1-10 based on the following rubric:
-    1-3: public agency with known art program but no active project or RFP currently identified
-    4-6: active project signal exists, percent-for-art likely applies, but no RFP found and budget unclear
-    7-8: active RFP or call for artists identified, budget confirmed above $100k
-    9-10: active RFP with budget confirmed significantly above $100k, deadline upcoming, project scope aligns closely with Tre Borden's portfolio
-- notes: anything else relevant including budget if known
-
-Only save leads you are confident score 6 or above. Do not save weak signals.
-
-Important: today's date is {today}. Do not include any opportunities with deadlines that have already passed.
-
-When you have found and evaluated leads, call the save_leads_to_spreadsheet function with your findings."""
-    }
 
 TOOLS = [
     {
@@ -107,6 +31,7 @@ TOOLS = [
                             "company_name": {"type": "string"},
                             "type": {"type": "string"},
                             "location": {"type": "string"},
+                            "geographic_area": {"type": "string"},
                             "why_a_lead": {"type": "string"},
                             "company_website": {"type": "string"},
                             "source_url": {"type": "string"},
@@ -139,39 +64,51 @@ def leads():
 @app.route("/run", methods=["GET", "POST"])
 def run():
     segment = request.args.get("segment") or request.form.get("segment", "corporate")
+    geography = request.args.get("geography") or request.form.get("geography", "Greater Los Angeles Area")
 
     def generate():
         client = anthropic.Anthropic()
         messages = []
-        system_prompts = get_system_prompts()
         saved_leads = []
 
         if segment == "corporate":
-            user_message = """Please search for potential corporate art program leads for Tre Borden /Co 
-            in Los Angeles and surrounding areas. Find at least 5 strong leads, evaluate them carefully, 
-            and save the results to the spreadsheet."""
+            user_message = (
+                f"Please search for potential corporate art program leads for Tre Borden /Co "
+                f"in the {geography} area. Find at least 5 strong leads, evaluate "
+                f"them carefully, and save the results to the spreadsheet. "
+                f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
+            )
         else:
-            user_message = """Please search for potential public sector art commission leads for Tre Borden /Co 
-            in Los Angeles and surrounding areas. Focus on active RFPs, percent-for-art opportunities, 
-            and public construction projects with budgets over $100k. Find at least 5 strong leads, 
-            evaluate them carefully, and save the results to the spreadsheet."""
+            user_message = (
+                f"Please search for potential public sector art commission leads for Tre Borden /Co "
+                f"in the {geography} area. Focus on active RFPs, percent-for-art "
+                f"opportunities, and public construction projects with budgets over $100k. Find at "
+                f"least 5 strong leads, evaluate them carefully, and save the results to the spreadsheet. "
+                f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
+            )
 
-        # Tell Claude which companies are already in the spreadsheet so it skips them
         existing = get_existing_leads_for_segment(segment)
-        if existing:
-            names_list = ", ".join(existing)
-            user_message += f"\n\nIMPORTANT: The following companies have already been researched and saved. Do NOT research or include them again: {names_list}"
+        system_prompt = get_system_prompt(segment, existing if existing else None)
 
         yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
         messages.append({"role": "user", "content": user_message})
 
+        max_iterations = 20
+        iteration = 0
+
         while True:
+            iteration += 1
+            if iteration > max_iterations:
+                yield "data: Search loop safety limit reached.\n\n"
+                yield f"data: DONE|{json.dumps(saved_leads)}\n\n"
+                return
+
             while True:
                 try:
                     response = client.messages.create(
                         model="claude-sonnet-4-6",
-                        max_tokens=8096,
-                        system=system_prompts[segment],
+                        max_tokens=4096,
+                        system=system_prompt,
                         tools=TOOLS,
                         messages=messages
                     )

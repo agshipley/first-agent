@@ -147,6 +147,30 @@
             background: var(--gray-bg);
         }
 
+        .geo-select {
+            padding: 10px 40px 10px 18px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            border: 2px solid var(--black);
+            background-color: var(--white);
+            color: var(--black);
+            cursor: pointer;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 14px;
+        }
+
+        .geo-select:focus {
+            outline: none;
+            border-color: var(--pink-dark);
+        }
+
         .run-btn {
             padding: 12px 36px;
             border-radius: 50px;
@@ -379,6 +403,19 @@
         <div class="controls">
             <button class="segment-btn active" data-segment="corporate" onclick="selectSegment(this)">Corporate</button>
             <button class="segment-btn" data-segment="public_sector" onclick="selectSegment(this)">Public Sector</button>
+            <select class="geo-select" id="geoSelect">
+                <option value="Greater Los Angeles Area" selected>Greater Los Angeles Area</option>
+                <option value="San Francisco">San Francisco</option>
+                <option value="Portland">Portland</option>
+                <option value="Seattle">Seattle</option>
+                <option value="Chicago">Chicago</option>
+                <option value="New York">New York</option>
+                <option value="Washington D.C.">Washington D.C.</option>
+                <option value="Boston">Boston</option>
+                <option value="Dallas">Dallas</option>
+                <option value="Houston">Houston</option>
+                <option value="New Orleans">New Orleans</option>
+            </select>
             <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
         </div>
 
@@ -440,7 +477,7 @@
             log.scrollTop = log.scrollHeight;
         }
 
-        function runAgent(retryCount) {
+        async function runAgent(retryCount) {
             retryCount = retryCount || 0;
 
             const btn = document.getElementById("runBtn");
@@ -463,17 +500,20 @@
                 previousLeadsSection.style.display = "none";
             }
 
-            let previousNames = new Set();
-            fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString())
-                .then(r => r.json())
-                .then(existing => {
-                    existing.forEach(l => previousNames.add(l.company_name.toLowerCase()));
-                })
-                .catch(() => {});
+            const geography = document.getElementById("geoSelect").value;
+
+            // Await existing leads before opening the stream so previousNames is
+            // populated before DONE fires (race condition fix)
+            const previousNames = new Set();
+            try {
+                const r = await fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString());
+                const existing = await r.json();
+                existing.forEach(l => previousNames.add(l.company_name.toLowerCase()));
+            } catch(e) {}
 
             let receivedData = false;
 
-            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment}).toString());
+            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography}).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;
@@ -490,7 +530,7 @@
                         if (newLeads && newLeads.length > 0) {
                             results.style.display = "block";
                             newLeads.forEach(lead => {
-                                newLeadCards.innerHTML += renderLeadCard(lead, true);
+                                newLeadCards.insertAdjacentHTML("beforeend", renderLeadCard(lead, true));
                             });
                         }
 
@@ -504,7 +544,7 @@
                                     results.style.display = "block";
                                     previousLeadsSection.style.display = "block";
                                     previous.forEach(lead => {
-                                        previousLeadCards.innerHTML += renderLeadCard(lead, false);
+                                        previousLeadCards.insertAdjacentHTML("beforeend", renderLeadCard(lead, false));
                                     });
                                 }
                             })
