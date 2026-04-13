@@ -78,13 +78,14 @@ def api_permits():
                 if _budget_sort_key(sp) >= art_budget_min
             ]
 
-        # Ordinance filter: "yes" keeps only permits where an ordinance is the
-        # primary driver; "no" keeps only permits that would score H/M on their
-        # own merits (keywords, scale, project type) without an ordinance.
+        # Ordinance filter:
+        #   "yes" → ordinance triggered (PADFP-mandated art budget)
+        #   "no"  → ordinance NOT triggered (pure project-characteristics scoring:
+        #            keywords, occupancy type, scale — no PADFP involvement at all)
         if require_ordinance == "yes":
-            opportunities = [sp for sp in opportunities if sp.ordinance_dependent]
+            opportunities = [sp for sp in opportunities if sp.ordinance_triggered]
         elif require_ordinance == "no":
-            opportunities = [sp for sp in opportunities if not sp.ordinance_dependent]
+            opportunities = [sp for sp in opportunities if not sp.ordinance_triggered]
 
         # Sort by estimated art budget descending (biggest opportunities first),
         # then by filing date descending (most recent within the same budget tier).

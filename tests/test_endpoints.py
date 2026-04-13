@@ -139,8 +139,8 @@ class TestApiPermitsEndpoint:
             "issue_date": None,
         }
 
-    def test_require_ordinance_no_excludes_dependent_permits(self, client):
-        """require_ordinance=no should only return permits that score H/M without ordinance."""
+    def test_require_ordinance_no_excludes_triggered_permits(self, client):
+        """require_ordinance=no: pure project-characteristics view — no PADFP involvement."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
@@ -150,11 +150,11 @@ class TestApiPermitsEndpoint:
             )
         data = resp.get_json()
         for p in data["permits"]:
-            assert p["ordinance_dependent"] is False, \
-                f"Expected no ordinance-dependent permits, got: {p['address']}"
+            assert p["ordinance_triggered"] is False, \
+                f"Expected no ordinance-triggered permits in 'no' view, got: {p['address']}"
 
-    def test_require_ordinance_yes_keeps_only_dependent_permits(self, client):
-        """require_ordinance=yes should only return ordinance-load-bearing permits."""
+    def test_require_ordinance_yes_keeps_only_triggered_permits(self, client):
+        """require_ordinance=yes: only PADFP-triggered permits."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
@@ -164,8 +164,8 @@ class TestApiPermitsEndpoint:
             )
         data = resp.get_json()
         for p in data["permits"]:
-            assert p["ordinance_dependent"] is True, \
-                f"Expected only ordinance-dependent permits, got: {p['address']}"
+            assert p["ordinance_triggered"] is True, \
+                f"Expected only ordinance-triggered permits in 'yes' view, got: {p['address']}"
 
     def test_require_ordinance_all_returns_both(self, client):
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
