@@ -154,15 +154,11 @@ class TestRelevanceScoring:
         result = score_permit(permit, la_ordinances)
         assert result.relevance == RelevanceLevel.HIGH
 
-    def test_commercial_below_padfp_threshold_scores_high_from_project_type_alone(self, la_ordinances):
-        # NOTE: This is a known engine characteristic worth reviewing.
-        # A $300K commercial new construction under review earns:
-        #   occupancy COMMERCIAL (3) + type NEW_CONSTRUCTION (3) + status UNDER_REVIEW (3) = 9
-        # That hits the HIGH threshold (≥9) even though the ordinance doesn't trigger
-        # and the project value is too small for meaningful art commissioning.
-        # The engine currently has no lower valuation cutoff for High relevance.
-        # If this produces too much noise in practice, consider requiring ordinance
-        # trigger or a minimum valuation for HIGH scores.
+    def test_commercial_below_padfp_threshold_caps_at_medium(self, la_ordinances):
+        # A $300K commercial new construction earns 9 category points but the
+        # ordinance doesn't trigger. The valuation floor ($5M) prevents HIGH
+        # when there's no ordinance requirement — small tenant improvements and
+        # minor retail buildouts are not Tre's market.
         permit = make_permit(
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
@@ -170,8 +166,23 @@ class TestRelevanceScoring:
             valuation=300_000.0,
         )
         result = score_permit(permit, la_ordinances)
+        assert result.relevance == RelevanceLevel.MEDIUM
+        assert result.ordinance_triggered is False
+
+    def test_large_project_without_ordinance_trigger_still_scores_high(self, la_ordinances):
+        # A $10M project in a city with no ordinance (or wrong project type for
+        # the ordinance) should still score HIGH — voluntary commissioning is
+        # plausible at that scale even without a formal requirement.
+        permit = make_permit(
+            city="Somewhere", state="XX",   # no ordinance data for this city
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(permit, la_ordinances)
+        assert result.ordinance_triggered is False
         assert result.relevance == RelevanceLevel.HIGH
-        assert result.ordinance_triggered is False  # ordinance correctly not triggered
 
     def test_single_family_is_none_regardless_of_valuation(self, la_ordinances):
         permit = make_permit(

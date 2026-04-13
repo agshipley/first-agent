@@ -78,6 +78,11 @@ _VALUATION_BANDS = [
 _HIGH_THRESHOLD   = 9   # ordinance triggered + strong occupancy + high valuation
 _MEDIUM_THRESHOLD = 5   # ordinance triggered or strong occupancy with decent valuation
 
+# Minimum valuation required for HIGH relevance when no ordinance triggered.
+# Without a formal percent-for-art requirement, voluntary art commissioning is
+# only plausible at a meaningful project scale.
+_HIGH_NO_ORDINANCE_MIN_VALUATION = 5_000_000
+
 
 # ── Ordinance matching ────────────────────────────────────────────────────────
 
@@ -195,7 +200,22 @@ def score_permit(
         relevance = RelevanceLevel.NONE
         reasons = ["Project type or status does not support art commissioning."]
     elif score >= _HIGH_THRESHOLD:
-        relevance = RelevanceLevel.HIGH
+        # Valuation floor: without an ordinance trigger, require $5M+ for HIGH.
+        # Category weights alone (occupancy + type + status) can sum to 9 on a
+        # $300K tenant improvement — that's not a project Tre would pursue.
+        # A $5M+ project without a formal ordinance can still warrant outreach
+        # because voluntary art commissioning is plausible at that scale.
+        if not ord_result.triggered and (permit.valuation or 0) < _HIGH_NO_ORDINANCE_MIN_VALUATION:
+            relevance = RelevanceLevel.MEDIUM
+            val_str = f"${permit.valuation:,.0f}" if permit.valuation is not None else "unknown"
+            reasons.append(
+                f"Capped at Medium: no ordinance triggered and valuation "
+                f"{val_str} is below the "
+                f"${_HIGH_NO_ORDINANCE_MIN_VALUATION:,.0f} floor for High relevance "
+                f"without an ordinance requirement."
+            )
+        else:
+            relevance = RelevanceLevel.HIGH
     elif score >= _MEDIUM_THRESHOLD:
         relevance = RelevanceLevel.MEDIUM
     else:
