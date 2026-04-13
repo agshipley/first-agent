@@ -25,6 +25,12 @@ python hello.py
 
 # Production server
 gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+
+# Run tests (no API keys required — all external calls are mocked)
+pytest                  # run all tests
+pytest -v               # verbose output with test names
+pytest --cov            # with coverage report
+pytest tests/test_permits_engine.py   # engine tests only
 ```
 
 Set `ANTHROPIC_API_KEY` in `.env` before running.
