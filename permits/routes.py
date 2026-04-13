@@ -50,6 +50,8 @@ def api_permits():
             limit=min(int(request.args.get("limit", 50)), 200),
             source=request.args.get("source", "submitted"),
         )
+        art_budget_min = float(request.args.get("art_budget_min", 0))
+        require_ordinance = request.args.get("require_ordinance", "all")
 
         permits = la_connector.fetch(filters)
 
@@ -67,6 +69,22 @@ def api_permits():
             sp for sp in scored
             if sp.relevance in (RelevanceLevel.HIGH, RelevanceLevel.MEDIUM)
         ]
+
+        # Apply estimated art budget floor when requested.
+        # Permits with no calculable budget are excluded when any minimum is set.
+        if art_budget_min > 0:
+            opportunities = [
+                sp for sp in opportunities
+                if _budget_sort_key(sp) >= art_budget_min
+            ]
+
+        # Ordinance filter: "yes" keeps only permits where an ordinance is the
+        # primary driver; "no" keeps only permits that would score H/M on their
+        # own merits (keywords, scale, project type) without an ordinance.
+        if require_ordinance == "yes":
+            opportunities = [sp for sp in opportunities if sp.ordinance_dependent]
+        elif require_ordinance == "no":
+            opportunities = [sp for sp in opportunities if not sp.ordinance_dependent]
 
         # Sort by estimated art budget descending (biggest opportunities first),
         # then by filing date descending (most recent within the same budget tier).

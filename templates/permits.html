@@ -492,6 +492,17 @@
         <!-- Filter bar -->
         <div class="filter-bar">
             <div class="filter-group">
+                <span class="filter-label">Est. Art Budget</span>
+                <select id="artBudgetMin" class="filter-select">
+                    <option value="0">Any Budget</option>
+                    <option value="100000">$100K+</option>
+                    <option value="250000">$250K+</option>
+                    <option value="500000">$500K+</option>
+                    <option value="1000000">$1M+</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
                 <span class="filter-label">Min Project Value</span>
                 <select id="minVal" class="filter-select">
                     <option value="5000000">$5M+</option>
@@ -523,6 +534,15 @@
             <div class="filter-group">
                 <span class="filter-label" id="dateLabel">Submitted After</span>
                 <input type="date" id="dateFrom" class="filter-input">
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Ordinance</span>
+                <select id="requireOrdinance" class="filter-select">
+                    <option value="all">All</option>
+                    <option value="yes">PADFP Required</option>
+                    <option value="no">No Ordinance Needed</option>
+                </select>
             </div>
 
             <div class="filter-group">
@@ -586,10 +606,12 @@
             const params = new URLSearchParams({
                 source: currentSource,
                 status_category: statusCategory,
+                art_budget_min: document.getElementById('artBudgetMin').value,
                 min_valuation: document.getElementById('minVal').value,
                 permit_type: document.getElementById('permitType').value,
                 occupancy_type: document.getElementById('occupancyType').value,
                 date_from: document.getElementById('dateFrom').value,
+                require_ordinance: document.getElementById('requireOrdinance').value,
                 limit: document.getElementById('limit').value,
             });
 
@@ -701,16 +723,8 @@
         }
 
         function whyItScoredHtml(reasons) {
-            // Show first 2 reasons; skip the long ordinance-not-triggered message
-            const filtered = reasons.filter(r =>
-                !r.startsWith('Valuation') && !r.startsWith('No percent')
-            ).slice(0, 2);
-            if (filtered.length === 0) {
-                return reasons.slice(0, 2).map(r =>
-                    `<div class="why-reason">${escHtml(r)}</div>`
-                ).join('');
-            }
-            return filtered.map(r =>
+            // Engine curates reasons — show the first 3 as-is.
+            return reasons.slice(0, 3).map(r =>
                 `<div class="why-reason">${escHtml(r)}</div>`
             ).join('');
         }

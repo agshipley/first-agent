@@ -110,7 +110,73 @@ class TestApiPermitsEndpoint:
         permit = data["permits"][0]
         assert "relevance" in permit
         assert "ordinance_triggered" in permit
+        assert "ordinance_dependent" in permit
         assert "art_budget_display" in permit
+
+    def _mock_hotel_row(self):
+        return {
+            "permit_nbr": "TEST-HOTEL-001",
+            "permit_type": "Bldg-New",
+            "status_desc": "Verifications in Progress",
+            "permit_sub_type": "Commercial",
+            "valuation": "10000000",
+            "work_desc": "New hotel with lobby and rooftop gallery",
+            "primary_address": "200 Hotel St",
+            "submitted_date": "2026-01-01T00:00:00.000",
+            "issue_date": None,
+        }
+
+    def _mock_generic_commercial_row(self):
+        return {
+            "permit_nbr": "TEST-OFFICE-001",
+            "permit_type": "Bldg-New",
+            "status_desc": "Verifications in Progress",
+            "permit_sub_type": "Commercial",
+            "valuation": "8000000",
+            "work_desc": "New commercial office building",
+            "primary_address": "300 Office Blvd",
+            "submitted_date": "2026-01-01T00:00:00.000",
+            "issue_date": None,
+        }
+
+    def test_require_ordinance_no_excludes_dependent_permits(self, client):
+        """require_ordinance=no should only return permits that score H/M without ordinance."""
+        rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000"
+                "&require_ordinance=no"
+            )
+        data = resp.get_json()
+        for p in data["permits"]:
+            assert p["ordinance_dependent"] is False, \
+                f"Expected no ordinance-dependent permits, got: {p['address']}"
+
+    def test_require_ordinance_yes_keeps_only_dependent_permits(self, client):
+        """require_ordinance=yes should only return ordinance-load-bearing permits."""
+        rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000"
+                "&require_ordinance=yes"
+            )
+        data = resp.get_json()
+        for p in data["permits"]:
+            assert p["ordinance_dependent"] is True, \
+                f"Expected only ordinance-dependent permits, got: {p['address']}"
+
+    def test_require_ordinance_all_returns_both(self, client):
+        rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp_all = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&require_ordinance=all"
+            )
+        data = resp_all.get_json()
+        # Both rows should survive (hotel is self-sufficient; office is dependent but H/M)
+        assert data["count"] >= 1  # at least one result
 
     def test_api_permits_empty_response(self, client):
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",

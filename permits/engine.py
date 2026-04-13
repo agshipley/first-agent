@@ -46,6 +46,19 @@ _OCCUPANCY_WEIGHT: dict[OccupancyType, int] = {
     OccupancyType.OTHER:              1,
 }
 
+# Per-occupancy reason text shown in "Why It Scored".
+# Commercial and Other are None — they rely on keywords and ordinance to differentiate.
+_OCCUPANCY_SPECIFIC_REASONS: dict[OccupancyType, Optional[str]] = {
+    OccupancyType.CIVIC:              "Civic/public facility — strong art commissioning tradition.",
+    OccupancyType.EDUCATIONAL:        "Educational institution — universities and schools often commission art for campus buildings.",
+    OccupancyType.MIXED_USE:          "Mixed-use development with public-facing spaces.",
+    OccupancyType.RESIDENTIAL_MULTI:  "Multi-family residential — qualifies under PADFP for apartment developments.",
+    OccupancyType.COMMERCIAL:         None,
+    OccupancyType.OTHER:              None,
+    OccupancyType.INDUSTRIAL:         None,
+    OccupancyType.RESIDENTIAL_SINGLE: None,
+}
+
 # Permit types carry timing signal: new construction is highest value because
 # art decisions happen earliest; demolition is irrelevant.
 _TYPE_WEIGHT: dict[PermitType, int] = {
@@ -83,6 +96,11 @@ _MEDIUM_THRESHOLD = 5   # ordinance triggered or strong occupancy with decent va
 # Without a formal percent-for-art requirement, voluntary art commissioning is
 # only plausible at a meaningful project scale.
 _HIGH_NO_ORDINANCE_MIN_VALUATION = 5_000_000
+
+# COMMERCIAL permits need more than the ordinance trigger to reach HIGH.
+# Generic office TIs and retail buildouts trigger PADFP but rarely commission art.
+# Require keyword venue signals (hotel, museum, lobby, etc.) OR $20M+ scale.
+_COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS = 20_000_000
 
 
 # ── Keyword signals ───────────────────────────────────────────────────────────
@@ -228,6 +246,7 @@ class ScoredPermit:
 
     # Ordinance match
     ordinance_triggered: bool
+    ordinance_dependent: bool                # True when the ordinance is load-bearing for H/M status
     ordinance_name: Optional[str]            # name of the triggered ordinance, if any
     ordinance_match_reason: str              # why it does/doesn't trigger
 
@@ -249,6 +268,7 @@ class ScoredPermit:
         d = self.permit.to_dict()
         d.update({
             "ordinance_triggered":  self.ordinance_triggered,
+            "ordinance_dependent":  self.ordinance_dependent,
             "ordinance_name":       self.ordinance_name,
             "art_budget_display":   self.art_budget_display,
             "budget_basis":         self.budget_basis,
@@ -304,11 +324,9 @@ def score_permit(
         relevance = RelevanceLevel.NONE
         reasons = ["Project type or status does not support art commissioning."]
     elif score >= _HIGH_THRESHOLD:
-        # Valuation floor: without an ordinance trigger, require $5M+ for HIGH.
+        # Floor 1: without an ordinance trigger, require $5M+ for HIGH.
         # Category weights alone (occupancy + type + status) can sum to 9 on a
         # $300K tenant improvement — that's not a project Tre would pursue.
-        # A $5M+ project without a formal ordinance can still warrant outreach
-        # because voluntary art commissioning is plausible at that scale.
         if not ord_result.triggered and (permit.valuation or 0) < _HIGH_NO_ORDINANCE_MIN_VALUATION:
             relevance = RelevanceLevel.MEDIUM
             val_str = f"${permit.valuation:,.0f}" if permit.valuation is not None else "unknown"
@@ -318,6 +336,22 @@ def score_permit(
                 f"${_HIGH_NO_ORDINANCE_MIN_VALUATION:,.0f} floor for High relevance "
                 f"without an ordinance requirement."
             )
+        # Floor 2: generic COMMERCIAL without venue signals.
+        # The PADFP trigger alone covers every office TI and retail buildout over
+        # $500K — that's too broad. Require keyword venue signals (hotel, museum,
+        # lobby, etc.) OR $20M+ scale before surfacing as a High opportunity.
+        elif (
+            permit.occupancy_type == OccupancyType.COMMERCIAL
+            and not keyword_signals
+            and (permit.valuation or 0) < _COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS
+        ):
+            relevance = RelevanceLevel.MEDIUM
+            reasons.append(
+                f"Capped at Medium: commercial project with no specific venue signals "
+                f"(hotel, museum, lobby, etc.). Reaches High at "
+                f"${_COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS // 1_000_000}M+ "
+                f"or when work description names a specific program type."
+            )
         else:
             relevance = RelevanceLevel.HIGH
     elif score >= _MEDIUM_THRESHOLD:
@@ -325,12 +359,37 @@ def score_permit(
     else:
         relevance = RelevanceLevel.LOW
 
-    # ── Step 4: budget display ────────────────────────────────────────────────
+    # ── Step 4: ordinance dependency ─────────────────────────────────────────
+    # True when the ordinance bonus is load-bearing: without it (−6 pts) the
+    # permit would drop below its current relevance threshold.
+    # Also accounts for Floor 2: commercial without keywords would be capped at
+    # MEDIUM even if the raw score still clears HIGH.
+    if ord_result.triggered:
+        score_sans_ord = score - 6
+        commercial_floor_blocks = (
+            permit.occupancy_type == OccupancyType.COMMERCIAL
+            and not keyword_signals
+            and (permit.valuation or 0) < _COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS
+        )
+        if relevance == RelevanceLevel.HIGH:
+            would_still_be_high = (
+                score_sans_ord >= _HIGH_THRESHOLD and not commercial_floor_blocks
+            )
+            ordinance_dependent = not would_still_be_high
+        elif relevance == RelevanceLevel.MEDIUM:
+            ordinance_dependent = score_sans_ord < _MEDIUM_THRESHOLD
+        else:
+            ordinance_dependent = False
+    else:
+        ordinance_dependent = False
+
+    # ── Step 5: budget display ────────────────────────────────────────────────
     budget_display, budget_basis = _format_budget(permit, ord_result)
 
     return ScoredPermit(
         permit=permit,
         ordinance_triggered=ord_result.triggered,
+        ordinance_dependent=ordinance_dependent,
         ordinance_name=ord_result.ordinance_name if ord_result.triggered else None,
         ordinance_match_reason=ord_result.reason,
         art_budget_low=ord_result.art_budget_low,
@@ -477,35 +536,44 @@ def _compute_score(
     Compute a composite integer score, a list of plain-English reasons,
     and a list of matched high-signal keywords.
     Higher score is more relevant.
+
+    Reason order: ordinance → keywords → occupancy-specific → permit type
+                  → square footage → valuation
+    Status timing is scored but not added as a reason — the opportunity_stage
+    column already shows that in plain language.
     """
     score = 0
     reasons: list[str] = []
 
-    # Ordinance match is the primary signal — it doubles the base score
+    # 1. Ordinance match (primary signal — 6-point bonus when triggered)
     if ord_result.triggered:
         score += 6
         reasons.append(
             f"Triggers {ord_result.ordinance_name} "
             f"({ord_result.ordinance_percentage * 100:.0f}% of construction cost)."
         )
-    else:
-        reasons.append(ord_result.reason)
+    # When not triggered, no reason added — the budget column shows "Est. 0.5–1.5%"
+    # which is enough context; the non-trigger message is just noise in this column.
 
-    # Occupancy type
+    # 2. Keyword signals (most differentiating — names the specific project signals)
+    kw_delta, matched_kws = _keyword_score(permit.project_description)
+    score += kw_delta
+    if matched_kws:
+        reasons.append(f"Work description includes: {', '.join(matched_kws)}.")
+
+    # 3. Occupancy type (specific language per type; COMMERCIAL relies on keywords)
     occ_w = _OCCUPANCY_WEIGHT.get(permit.occupancy_type, 1)
     score += occ_w
-    if occ_w >= 3:
-        reasons.append(
-            f"{permit.occupancy_type.value.replace('_', ' ').title()} — "
-            "high-priority project type for art commissioning."
-        )
+    specific_occ_reason = _OCCUPANCY_SPECIFIC_REASONS.get(permit.occupancy_type)
+    if specific_occ_reason:
+        reasons.append(specific_occ_reason)
     elif occ_w == 0:
         reasons.append(
             f"{permit.occupancy_type.value.replace('_', ' ').title()} — "
             "low priority for art commissioning."
         )
 
-    # Permit type
+    # 4. Permit type
     type_w = _TYPE_WEIGHT.get(permit.permit_type, 1)
     score += type_w
     if permit.permit_type == PermitType.NEW_CONSTRUCTION:
@@ -513,15 +581,19 @@ def _compute_score(
     elif permit.permit_type in (PermitType.MAJOR_RENOVATION, PermitType.ADDITION):
         reasons.append("Renovation or addition — art commissioning still possible.")
 
-    # Status timing
+    # 5. Square footage
+    sqft_delta, sqft_reason = _sqft_score(permit.raw_data)
+    score += sqft_delta
+    if sqft_reason:
+        reasons.append(sqft_reason)
+
+    # 6. Status timing (score contribution only — opportunity_stage column owns the label)
     status_w = _STATUS_WEIGHT.get(permit.permit_status, 1)
     score += status_w
-    if permit.permit_status in (PermitStatus.UNDER_REVIEW, PermitStatus.APPROVED, PermitStatus.SUBMITTED):
-        reasons.append("Pre-issuance — early enough to influence art decisions.")
-    elif permit.permit_status == PermitStatus.FINAL:
+    if permit.permit_status == PermitStatus.FINAL:
         reasons.append("Near completion — late stage, window may be closing.")
 
-    # Valuation
+    # 7. Valuation
     val_w = 0
     for threshold, weight in _VALUATION_BANDS:
         if permit.valuation and permit.valuation >= threshold:
@@ -538,20 +610,6 @@ def _compute_score(
             f"${permit.valuation/1_000_000:.1f}M valuation — "
             "mid-scale project, meaningful art budget possible."
         )
-
-    # Keyword signals from work description
-    kw_delta, matched_kws = _keyword_score(permit.project_description)
-    score += kw_delta
-    if matched_kws:
-        reasons.append(
-            f"Work description signals: {', '.join(matched_kws)}."
-        )
-
-    # Square footage
-    sqft_delta, sqft_reason = _sqft_score(permit.raw_data)
-    score += sqft_delta
-    if sqft_reason:
-        reasons.append(sqft_reason)
 
     return score, reasons, matched_kws
 

@@ -170,12 +170,25 @@ class TestRelevanceScoring:
         assert result.relevance == RelevanceLevel.MEDIUM
         assert result.ordinance_triggered is False
 
-    def test_large_project_without_ordinance_trigger_still_scores_high(self, la_ordinances):
-        # A $10M project in a city with no ordinance (or wrong project type for
-        # the ordinance) should still score HIGH — voluntary commissioning is
-        # plausible at that scale even without a formal requirement.
+    def test_large_commercial_without_ordinance_trigger_still_scores_high(self, la_ordinances):
+        # A $20M+ commercial project with no ordinance still qualifies for HIGH —
+        # significant enough scale that voluntary art commissioning is plausible.
         permit = make_permit(
             city="Somewhere", state="XX",   # no ordinance data for this city
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=20_000_000.0,
+        )
+        result = score_permit(permit, la_ordinances)
+        assert result.ordinance_triggered is False
+        assert result.relevance == RelevanceLevel.HIGH
+
+    def test_commercial_10m_without_keywords_caps_at_medium(self, la_ordinances):
+        # Commercial permits below $20M with no venue signals (hotel, museum,
+        # lobby, etc.) are capped at Medium — generic office TIs aren't Tre's market.
+        permit = make_permit(
+            city="Somewhere", state="XX",
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
             occupancy_type=OccupancyType.COMMERCIAL,
@@ -183,7 +196,50 @@ class TestRelevanceScoring:
         )
         result = score_permit(permit, la_ordinances)
         assert result.ordinance_triggered is False
+        assert result.relevance == RelevanceLevel.MEDIUM
+
+    def test_commercial_10m_with_keywords_scores_high(self, la_ordinances):
+        # Keyword signals (hotel, lobby, etc.) are sufficient for HIGH even below $20M.
+        permit = make_permit(
+            city="Somewhere", state="XX",
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+            project_description="New boutique hotel with lobby and public plaza",
+        )
+        result = score_permit(permit, la_ordinances)
+        assert result.ordinance_triggered is False
+        assert result.keyword_signals  # hotel, lobby, plaza
         assert result.relevance == RelevanceLevel.HIGH
+
+    def test_commercial_with_padfp_and_keywords_scores_high(self, la_ordinances):
+        # In LA: PADFP trigger + hotel keywords → clear HIGH
+        permit = make_permit(
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+            project_description="New hotel with rooftop lobby and gallery",
+        )
+        result = score_permit(permit, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert result.keyword_signals
+        assert result.relevance == RelevanceLevel.HIGH
+
+    def test_commercial_with_padfp_no_keywords_below_20m_caps_at_medium(self, la_ordinances):
+        # In LA: PADFP triggers but no venue signals and under $20M → Medium
+        permit = make_permit(
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+            project_description="New commercial office building",
+        )
+        result = score_permit(permit, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert not result.keyword_signals
+        assert result.relevance == RelevanceLevel.MEDIUM
 
     def test_single_family_is_none_regardless_of_valuation(self, la_ordinances):
         permit = make_permit(
@@ -460,6 +516,60 @@ class TestSqftScore:
         assert r_with.relevance != RelevanceLevel.NONE
 
 
+# ── ordinance_dependent flag ─────────────────────────────────────────────────
+
+class TestOrdinanceDependent:
+
+    def test_not_dependent_when_ordinance_not_triggered(self, la_ordinances):
+        """No ordinance → never dependent."""
+        p = make_permit(city="Nowhere", state="XX", valuation=20_000_000.0)
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is False
+        assert result.ordinance_dependent is False
+
+    def test_dependent_when_ordinance_is_load_bearing(self, la_ordinances):
+        # Residential multi-family, $600K, OTHER type, FINAL status, no keywords:
+        #   non-ordinance score = occ(1) + type(1) + status(1) + val(0) = 3 (< MEDIUM threshold 5)
+        #   with PADFP +6: score = 9 → HIGH
+        # Without ordinance this would be LOW → ordinance is load-bearing → dependent=True
+        p = make_permit(
+            occupancy_type=OccupancyType.RESIDENTIAL_MULTI,
+            permit_type=PermitType.OTHER,
+            permit_status=PermitStatus.FINAL,
+            valuation=600_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert result.ordinance_dependent is True
+
+    def test_not_dependent_when_permit_scores_high_on_own_merits(self, la_ordinances):
+        # $10M commercial + hotel/lobby keywords → HIGH regardless of PADFP
+        p = make_permit(
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+            project_description="New boutique hotel with lobby and public gallery",
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert result.ordinance_dependent is False  # keywords make it self-sufficient
+
+    def test_civic_permit_not_dependent_on_ordinance(self, la_ordinances):
+        # CIVIC: occ=3 + type=3 + status=3 + val=2 = 11 → HIGH without any ordinance
+        p = make_permit(
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_dependent is False
+
+    def test_to_dict_includes_ordinance_dependent(self, la_ordinances):
+        p = make_permit(valuation=10_000_000.0)
+        result = score_permit(p, la_ordinances)
+        d = result.to_dict()
+        assert "ordinance_dependent" in d
+        assert isinstance(d["ordinance_dependent"], bool)
+
+
 # ── Outreach timing ───────────────────────────────────────────────────────────
 
 class TestOutreachTiming:
@@ -509,6 +619,116 @@ class TestOutreachTiming:
         )
         result = score_permit(p, la_ordinances)
         assert result.opportunity_stage == "Act now — permit imminent"
+
+
+# ── Relevance reason differentiation ─────────────────────────────────────────
+
+class TestRelevanceReasonDifferentiation:
+    """Verify that different permits produce different, specific relevance_reasons."""
+
+    def test_civic_permit_has_civic_reason(self, la_ordinances):
+        p = make_permit(
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        reasons = result.relevance_reasons
+        assert any("Civic" in r or "civic" in r for r in reasons), reasons
+
+    def test_educational_permit_has_educational_reason(self, la_ordinances):
+        p = make_permit(
+            occupancy_type=OccupancyType.EDUCATIONAL,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        reasons = result.relevance_reasons
+        assert any("Educational" in r or "educational" in r or "universit" in r for r in reasons), reasons
+
+    def test_mixed_use_permit_has_mixed_use_reason(self, la_ordinances):
+        p = make_permit(
+            occupancy_type=OccupancyType.MIXED_USE,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        reasons = result.relevance_reasons
+        assert any("Mixed-use" in r or "mixed-use" in r for r in reasons), reasons
+
+    def test_residential_multi_permit_has_padfp_mention(self, la_ordinances):
+        p = make_permit(
+            occupancy_type=OccupancyType.RESIDENTIAL_MULTI,
+            valuation=2_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        reasons = result.relevance_reasons
+        assert any("PADFP" in r or "Multi-family" in r or "multi-family" in r for r in reasons), reasons
+
+    def test_civic_and_commercial_have_different_reasons(self, la_ordinances):
+        civic = make_permit(
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=10_000_000.0,
+            permit_id="CIVIC-001",
+        )
+        commercial = make_permit(
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+            permit_id="COMM-001",
+        )
+        civic_reasons = score_permit(civic, la_ordinances).relevance_reasons
+        commercial_reasons = score_permit(commercial, la_ordinances).relevance_reasons
+        assert civic_reasons != commercial_reasons
+
+    def test_keyword_match_appears_in_reasons(self, la_ordinances):
+        p = make_permit(
+            project_description="New boutique hotel with lobby and gallery",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        reasons = result.relevance_reasons
+        assert any("Work description includes" in r for r in reasons), reasons
+        # Specific keywords should be named
+        kw_reason = next((r for r in reasons if "Work description includes" in r), "")
+        assert "hotel" in kw_reason or "lobby" in kw_reason or "gallery" in kw_reason
+
+    def test_keyword_reason_text_is_work_description_includes(self, la_ordinances):
+        """Confirm exact phrasing — not 'signals', not 'mentions'."""
+        p = make_permit(
+            project_description="Museum expansion with public plaza",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        kw_reasons = [r for r in result.relevance_reasons if "description" in r.lower()]
+        assert kw_reasons, "Expected a keyword reason in relevance_reasons"
+        assert all("Work description includes:" in r for r in kw_reasons)
+
+    def test_permit_with_no_keywords_has_no_keyword_reason(self, la_ordinances):
+        p = make_permit(
+            project_description="New commercial building",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        kw_reasons = [r for r in result.relevance_reasons if "Work description" in r]
+        assert kw_reasons == [], f"Expected no keyword reason, got: {kw_reasons}"
+
+    def test_pre_issuance_status_does_not_appear_in_reasons(self, la_ordinances):
+        """Status is shown in opportunity_stage, not relevance_reasons."""
+        p = make_permit(
+            permit_status=PermitStatus.UNDER_REVIEW,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert not any("Pre-issuance" in r for r in result.relevance_reasons)
+        assert not any("early enough" in r for r in result.relevance_reasons)
+
+    def test_ordinance_trigger_appears_first_in_reasons(self, la_ordinances):
+        """When ordinance triggered, it should be the first reason."""
+        p = make_permit(
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered
+        assert result.relevance_reasons, "Expected at least one reason"
+        assert "Triggers" in result.relevance_reasons[0]
 
 
 # ── _fmt_k helper ─────────────────────────────────────────────────────────────
