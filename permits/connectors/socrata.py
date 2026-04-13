@@ -188,13 +188,29 @@ class SocrataConnector(BaseConnector):
         query = {"$where": where, "$order": order, "$limit": fetch_limit}
         url = self._dataset_url(dataset)
 
-        try:
-            with httpx.Client(timeout=20) as client:
-                resp = client.get(url, params=query)
-                resp.raise_for_status()
-                rows = resp.json()
-        except Exception as exc:
-            raise RuntimeError(f"Socrata fetch error ({url}): {exc}") from exc
+        # 10 s connect, 45 s read — issued dataset is slower than submitted.
+        timeout = httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=10.0)
+        last_exc: Exception | None = None
+        for attempt in range(2):  # one retry on timeout
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    resp = client.get(url, params=query)
+                    resp.raise_for_status()
+                    rows = resp.json()
+                    break
+            except httpx.TimeoutException as exc:
+                last_exc = exc
+                if attempt == 0:
+                    time.sleep(2)
+                    continue
+                raise RuntimeError(
+                    f"Socrata fetch timed out after 2 attempts ({url}). "
+                    f"The LA open data portal may be slow — try again in a moment."
+                ) from exc
+            except Exception as exc:
+                raise RuntimeError(f"Socrata fetch error ({url}): {exc}") from exc
+        else:
+            raise RuntimeError(f"Socrata fetch error ({url}): {last_exc}") from last_exc
 
         if not isinstance(rows, list):
             raise RuntimeError(f"Unexpected Socrata response from {url}: {rows}")
