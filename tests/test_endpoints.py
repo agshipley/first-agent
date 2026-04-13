@@ -139,44 +139,59 @@ class TestApiPermitsEndpoint:
             "issue_date": None,
         }
 
-    def test_require_ordinance_no_excludes_triggered_permits(self, client):
-        """require_ordinance=no: pure project-characteristics view — no PADFP involvement."""
+    def test_include_ordinance_false_excludes_dependent_permits(self, client):
+        """include_ordinance=false (default): only non-ordinance-dependent permits shown."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
             resp = client.get(
                 "/api/permits?source=submitted&min_valuation=5000000"
-                "&require_ordinance=no"
+                "&include_ordinance=false"
             )
         data = resp.get_json()
         for p in data["permits"]:
-            assert p["ordinance_triggered"] is False, \
-                f"Expected no ordinance-triggered permits in 'no' view, got: {p['address']}"
+            assert p["ordinance_dependent"] is False, \
+                f"Ordinance-dependent permit appeared with toggle OFF: {p['address']}"
 
-    def test_require_ordinance_yes_keeps_only_triggered_permits(self, client):
-        """require_ordinance=yes: only PADFP-triggered permits."""
+    def test_include_ordinance_false_strips_padfp_from_reasons(self, client):
+        """When PADFP toggle is OFF, 'Triggers ...' should not appear in reasons."""
+        rows = [self._mock_hotel_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000"
+                "&include_ordinance=false"
+            )
+        data = resp.get_json()
+        for p in data["permits"]:
+            for reason in p.get("relevance_reasons", []):
+                assert not reason.startswith("Triggers "), \
+                    f"PADFP reason found with toggle OFF: {reason}"
+
+    def test_include_ordinance_true_shows_all_permits(self, client):
+        """include_ordinance=true: ordinance-dependent permits included."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
             resp = client.get(
                 "/api/permits?source=submitted&min_valuation=5000000"
-                "&require_ordinance=yes"
+                "&include_ordinance=true"
             )
         data = resp.get_json()
-        for p in data["permits"]:
-            assert p["ordinance_triggered"] is True, \
-                f"Expected only ordinance-triggered permits in 'yes' view, got: {p['address']}"
+        assert data["count"] >= 1
 
-    def test_require_ordinance_all_returns_both(self, client):
+    def test_include_ordinance_default_is_false(self, client):
+        """Without include_ordinance param, behavior should be same as false."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
-            resp_all = client.get(
-                "/api/permits?source=submitted&min_valuation=5000000&require_ordinance=all"
+            resp_default = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000"
             )
-        data = resp_all.get_json()
-        # Both rows should survive (hotel is self-sufficient; office is dependent but H/M)
-        assert data["count"] >= 1  # at least one result
+            resp_explicit = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&include_ordinance=false"
+            )
+        assert resp_default.get_json()["count"] == resp_explicit.get_json()["count"]
 
     def test_api_permits_empty_response(self, client):
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",

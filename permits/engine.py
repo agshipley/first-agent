@@ -114,9 +114,25 @@ _HIGH_SIGNAL_KEYWORDS = [
 ]
 
 # Work description keywords that signal the project is unlikely art territory.
+# Each match applies a -7 penalty (uncapped).
+# A typical commercial new construction (under review, $10M) has a base score of
+# 3+3+3+2=11. A single -7 penalty drops score to 4, below the MEDIUM threshold
+# of 5 — making these projects ordinance-dependent when PADFP triggers, and
+# scoring LOW/None on their own merits.
 _LOW_SIGNAL_KEYWORDS = [
-    "warehouse", "self-storage", "parking structure", "parking garage",
-    "cell tower", "storage facility",
+    "warehouse", "parking structure", "parking garage",
+    "senior care", "assisted living", "nursing",
+    "auto repair", "car wash", "gas station", "fast food",
+    "drive-through", "drive through",
+    "cell tower", "billboard", "antenna",
+]
+
+# Project types where art commissioning is implausible regardless of scale or ordinance.
+# These trigger _is_irrelevant → NONE, keeping them out of the feed entirely.
+_NEVER_ART_KEYWORDS = [
+    "self-storage", "storage facility",
+    "car wash", "gas station", "auto repair",
+    "drive-through", "drive through",
 ]
 
 # Square footage bands: (minimum_sqft, score_weight)
@@ -151,7 +167,11 @@ def _keyword_score(description: str) -> tuple[int, list[str]]:
     """
     Scan work description for art-commissioning signal keywords.
     Returns (score_delta, matched_high_signal_keywords).
-    Score delta is capped at ±2 to avoid overwhelming other signals.
+
+    High-signal keywords: +1 each, capped at +2 total.
+    Low-signal keywords:  -5 each, uncapped — strong enough that a single
+      match makes most standard commercial permits ordinance-dependent
+      (score without ordinance drops below the MEDIUM threshold of 5).
 
     Uses word-boundary matching so "park" doesn't match "parking",
     "theater" matches "theaters", etc.
@@ -160,15 +180,16 @@ def _keyword_score(description: str) -> tuple[int, list[str]]:
         return 0, []
     desc_lower = description.lower()
     matched: list[str] = []
-    delta = 0
+    high_delta = 0
+    low_delta = 0
     for kw in _HIGH_SIGNAL_KEYWORDS:
         if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
             matched.append(kw)
-            delta += 1
+            high_delta += 1
     for kw in _LOW_SIGNAL_KEYWORDS:
         if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
-            delta -= 1
-    return max(-2, min(2, delta)), matched
+            low_delta -= 7
+    return min(2, high_delta) + low_delta, matched
 
 
 def _sqft_score(raw_data: dict) -> tuple[int, Optional[str]]:
@@ -525,6 +546,11 @@ def _is_irrelevant(permit: CanonicalPermit) -> bool:
         return True
     if permit.occupancy_type == OccupancyType.INDUSTRIAL:
         return True
+    # Work descriptions naming project types that never involve art commissioning.
+    desc_lower = (permit.project_description or "").lower()
+    for kw in _NEVER_ART_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
+            return True
     return False
 
 

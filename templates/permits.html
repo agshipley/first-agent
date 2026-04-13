@@ -176,6 +176,52 @@
             border-color: var(--pink-dark);
         }
 
+        /* ── PADFP toggle switch ── */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--gray-light);
+            border-radius: 50px;
+            border: 2px solid var(--black);
+            transition: background 0.2s;
+        }
+
+        .toggle-slider::before {
+            content: "";
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 3px;
+            top: 3px;
+            background: var(--black);
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--pink);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(22px);
+        }
+
         .fetch-btn {
             padding: 11px 32px;
             border-radius: 50px;
@@ -537,12 +583,11 @@
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Ordinance</span>
-                <select id="requireOrdinance" class="filter-select">
-                    <option value="all">All</option>
-                    <option value="yes">PADFP Required</option>
-                    <option value="no">No Ordinance Needed</option>
-                </select>
+                <span class="filter-label">Include PADFP</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="includeOrdinance">
+                    <span class="toggle-slider"></span>
+                </label>
             </div>
 
             <div class="filter-group">
@@ -611,7 +656,7 @@
                 permit_type: document.getElementById('permitType').value,
                 occupancy_type: document.getElementById('occupancyType').value,
                 date_from: document.getElementById('dateFrom').value,
-                require_ordinance: document.getElementById('requireOrdinance').value,
+                include_ordinance: document.getElementById('includeOrdinance').checked ? 'true' : 'false',
                 limit: document.getElementById('limit').value,
             });
 

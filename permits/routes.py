@@ -51,7 +51,7 @@ def api_permits():
             source=request.args.get("source", "submitted"),
         )
         art_budget_min = float(request.args.get("art_budget_min", 0))
-        require_ordinance = request.args.get("require_ordinance", "all")
+        include_ordinance = request.args.get("include_ordinance", "false").lower() == "true"
 
         permits = la_connector.fetch(filters)
 
@@ -78,14 +78,12 @@ def api_permits():
                 if _budget_sort_key(sp) >= art_budget_min
             ]
 
-        # Ordinance filter:
-        #   "yes" → ordinance triggered (PADFP-mandated art budget)
-        #   "no"  → ordinance NOT triggered (pure project-characteristics scoring:
-        #            keywords, occupancy type, scale — no PADFP involvement at all)
-        if require_ordinance == "yes":
-            opportunities = [sp for sp in opportunities if sp.ordinance_triggered]
-        elif require_ordinance == "no":
-            opportunities = [sp for sp in opportunities if not sp.ordinance_triggered]
+        # Ordinance toggle (default OFF):
+        #   OFF → exclude permits where ordinance is load-bearing for H/M status.
+        #         Shows only what the engine finds on pure project characteristics.
+        #   ON  → include everything (including PADFP-dependent permits).
+        if not include_ordinance:
+            opportunities = [sp for sp in opportunities if not sp.ordinance_dependent]
 
         # Sort by estimated art budget descending (biggest opportunities first),
         # then by filing date descending (most recent within the same budget tier).
@@ -97,8 +95,20 @@ def api_permits():
             reverse=True,
         )
 
+        # Serialize. When PADFP is toggled OFF, strip the ordinance trigger line
+        # from reasons — it's noise in a view the user explicitly filtered away.
+        permit_dicts = []
+        for sp in opportunities:
+            d = sp.to_dict()
+            if not include_ordinance:
+                d["relevance_reasons"] = [
+                    r for r in d["relevance_reasons"]
+                    if not r.startswith("Triggers ")
+                ]
+            permit_dicts.append(d)
+
         return jsonify({
-            "permits": [sp.to_dict() for sp in opportunities],
+            "permits": permit_dicts,
             "count": len(opportunities),
             "source": filters.source,
             "status_category": filters.status_category,

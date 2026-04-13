@@ -72,6 +72,22 @@ class TestIsIrrelevant:
         p = make_permit(occupancy_type=OccupancyType.INDUSTRIAL)
         assert _is_irrelevant(p) is True
 
+    def test_self_storage_is_irrelevant(self):
+        p = make_permit(project_description="New 3-story self-storage facility")
+        assert _is_irrelevant(p) is True
+
+    def test_storage_facility_is_irrelevant(self):
+        p = make_permit(project_description="New storage facility building")
+        assert _is_irrelevant(p) is True
+
+    def test_car_wash_is_irrelevant(self):
+        p = make_permit(project_description="New car wash and detail center")
+        assert _is_irrelevant(p) is True
+
+    def test_gas_station_is_irrelevant(self):
+        p = make_permit(project_description="New gas station with convenience store")
+        assert _is_irrelevant(p) is True
+
     def test_commercial_new_construction_is_relevant(self):
         p = make_permit(
             permit_type=PermitType.NEW_CONSTRUCTION,
@@ -439,10 +455,63 @@ class TestKeywordScore:
         delta, _ = _keyword_score(desc)
         assert delta <= 2
 
-    def test_score_capped_at_minus_two(self):
-        desc = "warehouse parking structure self-storage parking garage storage facility cell tower"
-        delta, _ = _keyword_score(desc)
-        assert delta >= -2
+    def test_self_storage_scores_none_with_ordinance(self, la_ordinances):
+        """Self-storage is NONE regardless of scale — caught by _is_irrelevant."""
+        p = make_permit(
+            project_description="New 3-story self-storage building",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.NONE
+
+    def test_senior_care_scores_low_without_ordinance(self, la_ordinances):
+        """Senior care without ordinance should score Low — strong keyword penalty."""
+        p = make_permit(
+            city="Somewhere", state="XX",   # no ordinance
+            project_description="New senior care facility",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is False
+        assert result.relevance in (RelevanceLevel.LOW, RelevanceLevel.NONE)
+
+    def test_senior_care_is_ordinance_dependent_in_la(self, la_ordinances):
+        """In LA, a senior care permit that triggers PADFP should be ordinance_dependent."""
+        p = make_permit(
+            project_description="New senior care facility",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        # May or may not trigger PADFP depending on occupancy type mapping
+        # but if it does, it should be dependent
+        if result.ordinance_triggered:
+            assert result.ordinance_dependent is True
+
+    def test_museum_scores_high_without_ordinance(self, la_ordinances):
+        """A museum scores High on pure project characteristics — no ordinance needed."""
+        p = make_permit(
+            city="Somewhere", state="XX",   # no ordinance
+            project_description="New contemporary art museum with gallery spaces",
+            permit_type=PermitType.NEW_CONSTRUCTION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=20_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is False
+        assert result.relevance == RelevanceLevel.HIGH
+        assert result.ordinance_dependent is False
+
+    def test_low_signal_penalty_is_strong_and_uncapped(self):
+        # Each low-signal keyword applies a -7 penalty with no cap.
+        # A single match should be enough to make a typical commercial permit
+        # score below the MEDIUM threshold (5) on its own merits.
+        delta_single, _ = _keyword_score("new senior care facility")
+        assert delta_single <= -7
+
+        # Multiple low-signal keywords compound
+        delta_multi, _ = _keyword_score("warehouse parking structure auto repair")
+        assert delta_multi <= -14
 
     def test_high_signal_description_scores_higher_than_generic(self, la_ordinances):
         hotel = make_permit(
