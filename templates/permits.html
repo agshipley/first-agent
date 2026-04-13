@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tre Borden /Co — LA Permits Monitor</title>
+    <title>Tre Borden /Co — Art Commissioning Opportunities</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
@@ -13,6 +13,7 @@
             --black: #1a1a1a;
             --pink: #F2C4DE;
             --pink-dark: #E8A8CC;
+            --pink-deep: #7a2244;
             --gray-text: #666;
             --gray-light: #e0e0e0;
             --gray-bg: #F2F0EC;
@@ -34,7 +35,7 @@
             align-items: flex-start;
             justify-content: space-between;
             padding: 32px 48px;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -65,17 +66,17 @@
         .nav-links a:hover { opacity: 0.6; }
         .nav-links a.active { font-weight: 700; }
 
-        .divider { max-width: 1200px; margin: 0 auto; padding: 0 48px; }
+        .divider { max-width: 1400px; margin: 0 auto; padding: 0 48px; }
         .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
 
         /* ── Main ── */
         .main {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 48px 48px 80px;
         }
 
-        .page-title { margin-bottom: 12px; }
+        .page-title { margin-bottom: 8px; }
 
         .page-title .prefix {
             font-size: 28px;
@@ -94,7 +95,7 @@
             line-height: 1.7;
             color: var(--gray-text);
             margin-bottom: 36px;
-            max-width: 620px;
+            max-width: 680px;
         }
 
         /* ── Source toggle ── */
@@ -118,12 +119,7 @@
 
         .toggle-btn:first-child { border-radius: 50px 0 0 50px; }
         .toggle-btn:last-child  { border-radius: 0 50px 50px 0; border-left: none; }
-
-        .toggle-btn.active {
-            background: var(--black);
-            color: var(--white);
-        }
-
+        .toggle-btn.active { background: var(--black); color: var(--white); }
         .toggle-btn:not(.active):hover { background: var(--gray-bg); }
 
         /* ── Filter bar ── */
@@ -278,25 +274,96 @@
         tbody tr:hover { background: #f5f3ef; }
 
         tbody td {
-            padding: 14px 16px;
+            padding: 16px 16px;
             vertical-align: top;
             line-height: 1.5;
         }
 
-        .td-address {
-            font-weight: 500;
-            min-width: 180px;
+        /* ── Project column ── */
+        .td-project { min-width: 220px; max-width: 280px; }
+
+        .project-address {
+            font-weight: 600;
+            font-size: 13px;
+            line-height: 1.3;
         }
 
-        .td-desc {
-            color: var(--gray-text);
-            max-width: 260px;
+        .project-desc {
             font-size: 12px;
+            color: var(--gray-text);
+            margin-top: 4px;
+            line-height: 1.5;
         }
 
+        .project-neighborhood {
+            font-size: 11px;
+            color: var(--pink-dark);
+            font-weight: 500;
+            margin-top: 3px;
+        }
+
+        /* ── Budget column ── */
+        .td-budget { min-width: 130px; white-space: nowrap; }
+
+        .budget-amount {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--black);
+            letter-spacing: -0.3px;
+        }
+
+        .budget-basis-note {
+            font-size: 11px;
+            color: var(--pink-dark);
+            font-weight: 500;
+            margin-top: 3px;
+            white-space: normal;
+            max-width: 130px;
+            line-height: 1.4;
+        }
+
+        /* ── Opportunity stage badges ── */
+        .stage-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+
+        .stage-early    { background: #e3f2fd; color: #1565c0; }
+        .stage-mid      { background: #e8f5e9; color: #2e7d32; }
+        .stage-act-now  { background: var(--pink); color: var(--pink-deep); border: 1.5px solid var(--pink-dark); }
+        .stage-late     { background: #f5f5f5; color: #757575; border: 1px solid #e0e0e0; }
+
+        /* ── Why it scored ── */
+        .td-why {
+            font-size: 12px;
+            color: var(--gray-text);
+            max-width: 240px;
+            line-height: 1.6;
+        }
+
+        .why-reason {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 3px;
+        }
+
+        .why-reason::before {
+            content: "·";
+            color: var(--pink-dark);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        /* ── Value and date columns ── */
         .td-value {
             font-weight: 600;
             white-space: nowrap;
+            font-size: 13px;
         }
 
         .td-date {
@@ -305,93 +372,32 @@
             color: var(--gray-text);
         }
 
-        .td-actions {
-            white-space: nowrap;
-        }
-
-        /* ── Status badges ── */
-        .status-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 50px;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-
-        .status-UNDER_REVIEW  { background: #fff8e1; color: #a05000; }
-        .status-APPROVED      { background: #e8f5e9; color: #2e7d32; }
-        .status-ISSUED        { background: #e3f2fd; color: #1565c0; }
-        .status-FINAL         { background: #ede7f6; color: #4527a0; }
-        .status-EXPIRED       { background: #fce4ec; color: #880e4f; }
-
-        /* ── Type badges ── */
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 50px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .badge-NEW_CONSTRUCTION { background: #e6f0ff; color: #2244aa; }
-        .badge-MAJOR_RENOVATION { background: #fff3e0; color: #a05000; }
-        .badge-ADDITION         { background: #e8f5e9; color: #2e7d32; }
-        .badge-COMMERCIAL       { background: #f3e5f5; color: #6a1b9a; }
-        .badge-RESIDENTIAL_MULTI { background: #e0f7fa; color: #006064; }
-
-        /* ── Relevance badges ── */
-        .relevance-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 50px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-
-        .relevance-High   { background: var(--pink); color: #7a2244; border: 1.5px solid var(--pink-dark); }
-        .relevance-Medium { background: #fff8e1; color: #7a5000; border: 1.5px solid #ffe082; }
-
-        .art-budget {
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .budget-basis {
-            font-size: 11px;
-            color: var(--gray-text);
-            line-height: 1.4;
-            max-width: 160px;
-        }
-
-        /* ── Action buttons ── */
-        .btn-research {
-            padding: 6px 14px;
+        /* ── Action button ── */
+        .btn-deep-dive {
+            padding: 8px 16px;
             border-radius: 50px;
             font-family: 'DM Sans', sans-serif;
             font-size: 12px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            border: 1.5px solid var(--black);
-            background: var(--white);
+            border: 2px solid var(--pink-dark);
+            background: var(--pink);
             color: var(--black);
             transition: all 0.2s;
+            white-space: nowrap;
         }
 
-        .btn-research:hover {
-            background: var(--black);
-            color: var(--white);
+        .btn-deep-dive:hover {
+            background: var(--pink-dark);
         }
 
         .btn-permit {
-            padding: 6px 14px;
+            display: block;
+            margin-top: 6px;
+            padding: 5px 12px;
             border-radius: 50px;
             font-family: 'DM Sans', sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 500;
             cursor: pointer;
             border: 1.5px solid var(--gray-light);
@@ -399,8 +405,7 @@
             color: var(--gray-text);
             text-decoration: none;
             transition: all 0.2s;
-            display: inline-block;
-            margin-left: 6px;
+            text-align: center;
         }
 
         .btn-permit:hover { border-color: var(--black); color: var(--black); }
@@ -454,7 +459,7 @@
     <header class="site-header">
         <a href="https://www.treborden.com" class="logo" style="text-decoration:none;color:inherit;">TRE<br>BORDEN<br><span>/</span>CO</a>
         <nav class="nav-links">
-            <a href="/permits-monitor" class="active">Permits /</a>
+            <a href="/permits-monitor" class="active">Opportunities /</a>
             <a href="/">Lead Finder /</a>
             <a href="/reports">Reports /</a>
             <a href="https://www.treborden.com/spaces">Our Work /</a>
@@ -466,28 +471,28 @@
 
     <main class="main">
         <div class="page-title">
-            <span class="prefix">Tools / </span><span class="title">LA Permits Monitor</span>
+            <span class="prefix">Los Angeles / </span><span class="title">Art Commissioning Opportunities</span>
         </div>
         <p class="page-description">
-            Live LADBS permit data from <a href="https://data.lacity.org" target="_blank" style="color:var(--black);">data.lacity.org</a>.
-            <strong>In Pipeline</strong> shows permits still in plan check — the earliest art commissioning signal.
-            <strong>Recently Issued</strong> shows approved permits where construction is starting.
+            Live permit data from <a href="https://data.lacity.org" target="_blank" style="color:var(--black);">LADBS</a>, scored for art commissioning relevance.
+            Sorted by estimated art budget — biggest opportunities first.
+            Only High and Medium relevance permits are shown.
         </p>
 
         <!-- Source toggle -->
         <div class="source-toggle">
             <button class="toggle-btn active" id="btnPipeline" onclick="setSource('submitted')">
-                In Pipeline
+                In Plan Review
             </button>
             <button class="toggle-btn" id="btnIssued" onclick="setSource('issued')">
-                Recently Issued
+                Permitted &amp; Active
             </button>
         </div>
 
         <!-- Filter bar -->
         <div class="filter-bar">
             <div class="filter-group">
-                <span class="filter-label">Min Valuation</span>
+                <span class="filter-label">Min Project Value</span>
                 <select id="minVal" class="filter-select">
                     <option value="5000000">$5M+</option>
                     <option value="10000000">$10M+</option>
@@ -497,21 +502,21 @@
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Permit Type</span>
+                <span class="filter-label">Construction Type</span>
                 <select id="permitType" class="filter-select">
                     <option value="all">All Types</option>
                     <option value="new">New Construction</option>
-                    <option value="alteration">Alteration / Repair</option>
+                    <option value="alteration">Alteration / Renovation</option>
                     <option value="addition">Addition</option>
                 </select>
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Use Type</span>
+                <span class="filter-label">Project Category</span>
                 <select id="occupancyType" class="filter-select">
-                    <option value="all">All Uses</option>
-                    <option value="commercial">Commercial</option>
-                    <option value="apartment">Apartment / Residential</option>
+                    <option value="all">All Categories</option>
+                    <option value="commercial">Commercial / Office</option>
+                    <option value="apartment">Residential / Apartment</option>
                 </select>
             </div>
 
@@ -530,7 +535,7 @@
             </div>
 
             <button class="fetch-btn" id="fetchBtn" onclick="fetchPermits()">
-                Load Permits
+                Find Opportunities
             </button>
         </div>
 
@@ -539,13 +544,13 @@
 
         <div class="results-meta" id="resultsMeta" style="display:none;">
             <span class="results-count" id="resultsCount"></span>
-            <span class="cache-note">Data cached 1 hour · Source: LADBS via data.lacity.org</span>
+            <span class="cache-note">Sorted by estimated art budget · Data cached 1 hr · Source: LADBS via data.lacity.org</span>
         </div>
 
         <div id="resultsArea">
             <div class="empty-state">
-                <div class="empty-icon">🏗</div>
-                <div>Select filters above and click <strong>Load Permits</strong> to fetch live permit data.</div>
+                <div class="empty-icon">🎨</div>
+                <div>Select filters above and click <strong>Find Opportunities</strong> to surface art commissioning leads from live permit data.</div>
             </div>
         </div>
     </main>
@@ -561,7 +566,7 @@
             document.getElementById('btnPipeline').classList.toggle('active', source === 'submitted');
             document.getElementById('btnIssued').classList.toggle('active', source === 'issued');
             document.getElementById('dateLabel').textContent =
-                source === 'submitted' ? 'Submitted After' : 'Issued After';
+                source === 'submitted' ? 'Submitted After' : 'Permitted After';
         }
 
         // ── Fetch ──────────────────────────────────────────────────────────────
@@ -571,7 +576,7 @@
             const resultsMeta = document.getElementById('resultsMeta');
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>Loading...';
+            btn.innerHTML = '<span class="spinner"></span>Searching...';
             errorDiv.style.display = 'none';
             resultsMeta.style.display = 'none';
             document.getElementById('resultsArea').innerHTML = '';
@@ -592,7 +597,7 @@
                 .then(r => r.json())
                 .then(data => {
                     btn.disabled = false;
-                    btn.textContent = 'Load Permits';
+                    btn.textContent = 'Find Opportunities';
 
                     if (data.error) {
                         errorDiv.textContent = 'Error: ' + data.error;
@@ -604,7 +609,7 @@
                 })
                 .catch(err => {
                     btn.disabled = false;
-                    btn.textContent = 'Load Permits';
+                    btn.textContent = 'Find Opportunities';
                     errorDiv.textContent = 'Network error: ' + err.message;
                     errorDiv.style.display = 'block';
                 });
@@ -617,43 +622,43 @@
             const count = document.getElementById('resultsCount');
 
             if (permits.length === 0) {
-                area.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div>No permits matched your filters. Try adjusting the criteria.</div></div>';
+                area.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div>No High or Medium relevance opportunities matched these filters. Try a lower minimum project value or a wider date range.</div></div>';
                 meta.style.display = 'none';
                 return;
             }
 
-            count.textContent = permits.length + ' permit' + (permits.length === 1 ? '' : 's');
+            count.textContent =
+                permits.length + ' opportunit' + (permits.length === 1 ? 'y' : 'ies');
             meta.style.display = 'flex';
 
-            const dateHeader = source === 'submitted' ? 'Submitted' : 'Issued';
-            const dateKey    = source === 'submitted' ? 'filing_date' : 'approval_date';
+            const dateKey = source === 'submitted' ? 'filing_date' : 'approval_date';
 
             const rows = permits.map(p => {
-                const typeBadge   = permitTypeBadge(p.permit_type);
-                const statusBadge = statusBadgeHtml(p.permit_status);
-                const desc = p.project_description || '';
-                const descTrunc = desc.length > 120 ? desc.slice(0, 120) + '…' : desc;
-                const neighborhood = p.neighborhood || '';
-                const ladbsUrl = p.permit_id
+                const desc          = p.project_description || '';
+                const descClean     = cleanDesc(desc);
+                const descTrunc     = descClean.length > 110 ? descClean.slice(0, 110) + '…' : descClean;
+                const neighborhood  = p.neighborhood || '';
+                const stageBadge    = stageBadgeHtml(p.opportunity_stage || '');
+                const whyHtml       = whyItScoredHtml(p.relevance_reasons || []);
+                const budgetHtml    = budgetCellHtml(p);
+                const dateStr       = formatDate(p[dateKey]);
+                const ladbsUrl      = p.permit_id
                     ? `https://epermits.ladbs.org/PermitStatus/Details/${encodeURIComponent(p.permit_id)}`
                     : '';
-                const relevanceCell = relevanceCellHtml(p);
-                const budgetCell    = budgetCellHtml(p);
 
                 return `<tr>
-                    <td class="td-address">
-                        <strong>${escHtml(p.address)}</strong>
-                        ${neighborhood ? `<br><span style="font-weight:400;color:var(--gray-text);font-size:11px;">${escHtml(neighborhood)}</span>` : ''}
+                    <td class="td-project">
+                        <div class="project-address">${escHtml(p.address)}</div>
+                        <div class="project-desc" title="${escHtml(desc)}">${escHtml(descTrunc)}</div>
+                        ${neighborhood ? `<div class="project-neighborhood">${escHtml(neighborhood)}</div>` : ''}
                     </td>
-                    <td class="td-desc" title="${escHtml(desc)}">${escHtml(descTrunc)}</td>
-                    <td class="td-value">${escHtml(p.valuation_display)}</td>
-                    <td>${typeBadge}</td>
-                    <td>${statusBadge}</td>
-                    <td>${relevanceCell}</td>
-                    <td>${budgetCell}</td>
-                    <td class="td-date">${escHtml(p[dateKey] || '')}</td>
-                    <td class="td-actions">
-                        <button class="btn-research" onclick="sendToLeadSearch(${JSON.stringify(p.address)})">Research →</button>
+                    <td class="td-budget">${budgetHtml}</td>
+                    <td>${stageBadge}</td>
+                    <td class="td-why">${whyHtml}</td>
+                    <td class="td-value">${escHtml(p.valuation_display || '')}</td>
+                    <td class="td-date">${escHtml(dateStr)}</td>
+                    <td>
+                        <button class="btn-deep-dive" onclick="sendToLeadSearch(${JSON.stringify(p.address)})">Deep Dive →</button>
                         ${ladbsUrl ? `<a class="btn-permit" href="${escHtml(ladbsUrl)}" target="_blank" rel="noopener">Permit ↗</a>` : ''}
                     </td>
                 </tr>`;
@@ -664,14 +669,12 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Address</th>
-                                <th>Work Description</th>
-                                <th>Valuation</th>
-                                <th>Type</th>
-                                <th>Status</th>
-                                <th>Art Relevance</th>
+                                <th>Project</th>
                                 <th>Est. Art Budget</th>
-                                <th>${escHtml(dateHeader)}</th>
+                                <th>Stage</th>
+                                <th>Why It Scored</th>
+                                <th>Project Value</th>
+                                <th>Filed</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -680,45 +683,53 @@
                 </div>`;
         }
 
-        function permitTypeBadge(type) {
-            const labels = {
-                'NEW_CONSTRUCTION': 'New',
-                'MAJOR_RENOVATION': 'Renovation',
-                'ADDITION':         'Addition',
-            };
-            const label = labels[type] || type;
-            const cls = `badge-${type}` in {'badge-NEW_CONSTRUCTION':1,'badge-MAJOR_RENOVATION':1,'badge-ADDITION':1}
-                ? `badge badge-${type}` : 'badge';
-            return `<span class="${cls}">${escHtml(label)}</span>`;
-        }
-
-        function statusBadgeHtml(status) {
-            const labels = {
-                'UNDER_REVIEW': 'Under Review',
-                'APPROVED':     'Approved',
-                'ISSUED':       'Issued',
-                'FINAL':        'Final',
-                'EXPIRED':      'Expired',
-            };
-            const label = labels[status] || status;
-            return `<span class="status-badge status-${status}">${escHtml(label)}</span>`;
-        }
-
-        function relevanceCellHtml(p) {
-            const r = p.relevance;
-            if (r !== 'High' && r !== 'Medium') return '';
-            const reasons = (p.relevance_reasons || []).join('\n');
-            return `<span class="relevance-badge relevance-${r}" title="${escHtml(reasons)}">${escHtml(r)}</span>`;
-        }
-
         function budgetCellHtml(p) {
-            const r = p.relevance;
-            if (r !== 'High' && r !== 'Medium') return '';
-            if (!p.art_budget_display) return '';
-            return `<div class="art-budget">${escHtml(p.art_budget_display)}</div>
-                    ${p.ordinance_triggered
-                        ? `<div class="budget-basis">${escHtml(p.budget_basis)}</div>`
-                        : ''}`;
+            if (!p.art_budget_display) return '<span style="color:var(--gray-text);font-size:12px;">Estimating…</span>';
+            const basis = p.ordinance_triggered
+                ? (p.budget_basis || '').replace(/per .+$/, '').trim()
+                : 'Est. 0.5–1.5% of project value';
+            return `<div class="budget-amount">${escHtml(p.art_budget_display)}</div>
+                    <div class="budget-basis-note">${escHtml(basis)}</div>`;
+        }
+
+        function stageBadgeHtml(stage) {
+            let cls = 'stage-early';
+            if (stage.startsWith('Act now')) cls = 'stage-act-now';
+            else if (stage.startsWith('Mid'))  cls = 'stage-mid';
+            else if (stage.startsWith('Late')) cls = 'stage-late';
+            return `<span class="stage-badge ${cls}">${escHtml(stage)}</span>`;
+        }
+
+        function whyItScoredHtml(reasons) {
+            // Show first 2 reasons; skip the long ordinance-not-triggered message
+            const filtered = reasons.filter(r =>
+                !r.startsWith('Valuation') && !r.startsWith('No percent')
+            ).slice(0, 2);
+            if (filtered.length === 0) {
+                return reasons.slice(0, 2).map(r =>
+                    `<div class="why-reason">${escHtml(r)}</div>`
+                ).join('');
+            }
+            return filtered.map(r =>
+                `<div class="why-reason">${escHtml(r)}</div>`
+            ).join('');
+        }
+
+        function cleanDesc(desc) {
+            if (!desc) return '';
+            // LADBS work descriptions are often ALL CAPS — convert to title case
+            if (desc === desc.toUpperCase() && desc.length > 10) {
+                return desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase();
+            }
+            return desc;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } catch { return dateStr; }
         }
 
         function sendToLeadSearch(address) {

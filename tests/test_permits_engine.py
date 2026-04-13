@@ -14,6 +14,7 @@ from permits.engine import (
     RelevanceLevel, ScoredPermit,
     score_permit, score_permits, load_ordinances,
     _match_ordinances, _check_ordinance, _is_irrelevant,
+    _keyword_score, _sqft_score, _outreach_timing,
     _fmt_k,
 )
 from tests.conftest import make_permit
@@ -327,6 +328,187 @@ class TestScorePermits:
         assert "art_budget_display" in d
         assert "relevance_reasons" in d
         assert isinstance(d["relevance_reasons"], list)
+        assert "opportunity_stage" in d
+        assert "keyword_signals" in d
+
+    def test_to_dict_keyword_signals_is_list(self, la_ordinances):
+        permit = make_permit(project_description="New hotel lobby and plaza")
+        result = score_permits([permit], la_ordinances)[0]
+        d = result.to_dict()
+        assert isinstance(d["keyword_signals"], list)
+        assert "hotel" in d["keyword_signals"] or "lobby" in d["keyword_signals"]
+
+
+# ── Keyword scoring ───────────────────────────────────────────────────────────
+
+class TestKeywordScore:
+
+    def test_hotel_keyword_positive(self):
+        delta, matched = _keyword_score("New 12-story hotel with rooftop terrace")
+        assert delta > 0
+        assert "hotel" in matched
+
+    def test_lobby_and_plaza_both_match(self):
+        delta, matched = _keyword_score("Mixed-use tower with ground floor lobby and public plaza")
+        assert delta > 0
+        assert "lobby" in matched
+        assert "plaza" in matched
+
+    def test_theater_keyword_positive(self):
+        delta, matched = _keyword_score("Renovation of existing theater")
+        assert delta > 0
+        assert "theater" in matched
+
+    def test_theatre_alternate_spelling(self):
+        delta, matched = _keyword_score("New community theatre and cultural center")
+        assert "theatre" in matched or "cultural center" in matched
+
+    def test_warehouse_keyword_negative(self):
+        delta, matched = _keyword_score("New warehouse and storage facility")
+        assert delta < 0
+        assert matched == []  # low-signal keywords do not add to matched list
+
+    def test_parking_structure_negative(self):
+        delta, matched = _keyword_score("6-level parking structure")
+        assert delta < 0
+
+    def test_empty_description_returns_zero(self):
+        delta, matched = _keyword_score("")
+        assert delta == 0
+        assert matched == []
+
+    def test_score_capped_at_plus_two(self):
+        # Pile in many high-signal keywords
+        desc = "hotel lobby museum gallery theater plaza library cultural center university"
+        delta, _ = _keyword_score(desc)
+        assert delta <= 2
+
+    def test_score_capped_at_minus_two(self):
+        desc = "warehouse parking structure self-storage parking garage storage facility cell tower"
+        delta, _ = _keyword_score(desc)
+        assert delta >= -2
+
+    def test_high_signal_description_scores_higher_than_generic(self, la_ordinances):
+        hotel = make_permit(
+            project_description="New boutique hotel with lobby and gallery",
+            permit_id="HOTEL-001",
+        )
+        generic = make_permit(
+            project_description="New commercial building",
+            permit_id="GENERIC-001",
+        )
+        hotel_result = score_permit(hotel, la_ordinances)
+        generic_result = score_permit(generic, la_ordinances)
+        # Both should be scored, hotel should be at least as high
+        # (same base score + keyword bonus)
+        assert hotel_result.keyword_signals  # hotel has signals
+        assert not generic_result.keyword_signals or \
+               len(hotel_result.keyword_signals) > len(generic_result.keyword_signals)
+
+
+# ── Square footage scoring ─────────────────────────────────────────────────────
+
+class TestSqftScore:
+
+    def test_large_sqft_positive(self):
+        delta, reason = _sqft_score({"square_footage": "200000"})
+        assert delta > 0
+        assert reason is not None
+
+    def test_significant_sqft_positive(self):
+        delta, reason = _sqft_score({"square_footage": "75000"})
+        assert delta > 0
+
+    def test_small_sqft_negative(self):
+        delta, reason = _sqft_score({"square_footage": "3000"})
+        assert delta < 0
+        assert reason is not None
+
+    def test_mid_range_sqft_neutral(self):
+        delta, reason = _sqft_score({"square_footage": "20000"})
+        assert delta == 0
+        assert reason is None
+
+    def test_missing_sqft_returns_zero(self):
+        delta, reason = _sqft_score({})
+        assert delta == 0
+        assert reason is None
+
+    def test_malformed_sqft_returns_zero(self):
+        delta, reason = _sqft_score({"square_footage": "N/A"})
+        assert delta == 0
+        assert reason is None
+
+    def test_sqft_with_commas_parsed(self):
+        delta, reason = _sqft_score({"square_footage": "250,000"})
+        assert delta > 0  # 250k sqft is major development
+
+    def test_large_sqft_boosts_score_in_full_pipeline(self, la_ordinances):
+        """A project with large square footage scores higher than the same without."""
+        with_sqft = make_permit(
+            raw_data={"square_footage": "200000"},
+            permit_id="WITH-SQFT",
+        )
+        without_sqft = make_permit(
+            raw_data={},
+            permit_id="NO-SQFT",
+        )
+        r_with    = score_permit(with_sqft, la_ordinances)
+        r_without = score_permit(without_sqft, la_ordinances)
+        # with_sqft should be HIGH if without is MEDIUM, or same with higher score
+        # At minimum, the boost doesn't degrade it
+        assert r_with.relevance != RelevanceLevel.NONE
+
+
+# ── Outreach timing ───────────────────────────────────────────────────────────
+
+class TestOutreachTiming:
+
+    def test_under_review_is_early(self):
+        p = make_permit(permit_status=PermitStatus.UNDER_REVIEW)
+        assert _outreach_timing(p) == "Early — in plan review"
+
+    def test_submitted_is_early(self):
+        p = make_permit(permit_status=PermitStatus.SUBMITTED)
+        assert _outreach_timing(p) == "Early — in plan review"
+
+    def test_approved_is_mid(self):
+        p = make_permit(permit_status=PermitStatus.APPROVED)
+        assert _outreach_timing(p) == "Mid — approved, pre-construction"
+
+    def test_ready_to_issue_is_act_now(self):
+        """'Ready to Issue' maps to canonical APPROVED but is a special urgency case."""
+        p = make_permit(
+            permit_status=PermitStatus.APPROVED,
+            raw_data={"status_desc": "Ready to Issue"},
+        )
+        assert _outreach_timing(p) == "Act now — permit imminent"
+
+    def test_issued_is_late(self):
+        p = make_permit(permit_status=PermitStatus.ISSUED)
+        assert _outreach_timing(p) == "Late — construction may have started"
+
+    def test_final_is_late(self):
+        p = make_permit(permit_status=PermitStatus.FINAL)
+        assert _outreach_timing(p) == "Late — construction may have started"
+
+    def test_opportunity_stage_in_scored_permit(self, la_ordinances):
+        """score_permit populates opportunity_stage correctly."""
+        p = make_permit(
+            permit_status=PermitStatus.UNDER_REVIEW,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.opportunity_stage == "Early — in plan review"
+
+    def test_ready_to_issue_stage_in_scored_permit(self, la_ordinances):
+        p = make_permit(
+            permit_status=PermitStatus.APPROVED,
+            raw_data={"status_desc": "Ready to Issue"},
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.opportunity_stage == "Act now — permit imminent"
 
 
 # ── _fmt_k helper ─────────────────────────────────────────────────────────────

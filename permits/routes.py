@@ -8,13 +8,29 @@ Routes:
   GET /api/permits/metadata     → returns connector metadata
 """
 
+from datetime import date
+
 from flask import Blueprint, request, jsonify, render_template
 
 from permits.connectors.base import ConnectorFilters
 from permits.connectors.cities.los_angeles import la_connector
-from permits.engine import score_permits
+from permits.engine import score_permits, RelevanceLevel
 
 permits_bp = Blueprint("permits", __name__)
+
+
+def _budget_sort_key(sp) -> float:
+    """
+    Best estimate of the art budget value for sorting purposes.
+    Uses the ordinance-derived lower bound when available; falls back to
+    the conservative heuristic (0.5% of valuation) for non-triggered permits.
+    Returns 0.0 when there's no useful signal.
+    """
+    if sp.art_budget_low is not None:
+        return sp.art_budget_low
+    if sp.permit.valuation:
+        return sp.permit.valuation * 0.005
+    return 0.0
 
 
 @permits_bp.route("/permits-monitor")
@@ -44,9 +60,27 @@ def api_permits():
         # Score each permit for art commissioning relevance
         scored = score_permits(permits)
 
+        # Only surface opportunities where the engine has a meaningful signal.
+        # Low and None permits are not shown — this is an opportunity feed, not
+        # a permit browser.
+        opportunities = [
+            sp for sp in scored
+            if sp.relevance in (RelevanceLevel.HIGH, RelevanceLevel.MEDIUM)
+        ]
+
+        # Sort by estimated art budget descending (biggest opportunities first),
+        # then by filing date descending (most recent within the same budget tier).
+        opportunities.sort(
+            key=lambda sp: (
+                _budget_sort_key(sp),
+                sp.permit.filing_date or date.min,
+            ),
+            reverse=True,
+        )
+
         return jsonify({
-            "permits": [sp.to_dict() for sp in scored],
-            "count": len(scored),
+            "permits": [sp.to_dict() for sp in opportunities],
+            "count": len(opportunities),
             "source": filters.source,
             "status_category": filters.status_category,
         })

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -84,6 +85,32 @@ _MEDIUM_THRESHOLD = 5   # ordinance triggered or strong occupancy with decent va
 _HIGH_NO_ORDINANCE_MIN_VALUATION = 5_000_000
 
 
+# ── Keyword signals ───────────────────────────────────────────────────────────
+
+# Work description keywords that signal likely art commissioning contexts.
+_HIGH_SIGNAL_KEYWORDS = [
+    "hotel", "museum", "library", "cultural center", "transit station",
+    "mixed-use", "plaza", "lobby", "gallery", "theater", "theatre",
+    "university", "hospital", "civic center", "community center",
+    "performing arts", "concert hall", "arena", "park",
+]
+
+# Work description keywords that signal the project is unlikely art territory.
+_LOW_SIGNAL_KEYWORDS = [
+    "warehouse", "self-storage", "parking structure", "parking garage",
+    "cell tower", "storage facility",
+]
+
+# Square footage bands: (minimum_sqft, score_weight)
+# Larger developments are better art commissioning targets at scale.
+_SQ_FT_BANDS = [
+    (200_000, 2),   # major development
+    (50_000,  1),   # significant development
+    (5_000,   0),   # mid-range: neutral
+    (0,      -1),   # small project: penalty
+]
+
+
 # ── Ordinance matching ────────────────────────────────────────────────────────
 
 # Maps occupancy_type enum values to the project_types strings used in the
@@ -98,6 +125,77 @@ _OCCUPANCY_TO_ORDINANCE_TYPES: dict[OccupancyType, list[str]] = {
     OccupancyType.RESIDENTIAL_SINGLE: [],
     OccupancyType.OTHER:              ["Commercial"],
 }
+
+
+# ── Keyword and square-footage helpers ───────────────────────────────────────
+
+def _keyword_score(description: str) -> tuple[int, list[str]]:
+    """
+    Scan work description for art-commissioning signal keywords.
+    Returns (score_delta, matched_high_signal_keywords).
+    Score delta is capped at ±2 to avoid overwhelming other signals.
+
+    Uses word-boundary matching so "park" doesn't match "parking",
+    "theater" matches "theaters", etc.
+    """
+    if not description:
+        return 0, []
+    desc_lower = description.lower()
+    matched: list[str] = []
+    delta = 0
+    for kw in _HIGH_SIGNAL_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
+            matched.append(kw)
+            delta += 1
+    for kw in _LOW_SIGNAL_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
+            delta -= 1
+    return max(-2, min(2, delta)), matched
+
+
+def _sqft_score(raw_data: dict) -> tuple[int, Optional[str]]:
+    """
+    Score based on square footage when available in raw permit data.
+    Returns (score_delta, reason_string_or_None).
+    """
+    raw = (
+        raw_data.get("square_footage")
+        or raw_data.get("sqft")
+        or raw_data.get("sq_ft")
+    )
+    if not raw:
+        return 0, None
+    try:
+        sqft = float(str(raw).strip().replace(",", ""))
+    except (ValueError, TypeError):
+        return 0, None
+    for threshold, weight in _SQ_FT_BANDS:
+        if sqft >= threshold:
+            if weight > 0:
+                return weight, f"{sqft:,.0f} sq ft — significant development scale."
+            elif weight < 0:
+                return weight, f"{sqft:,.0f} sq ft — small project; lower art commissioning potential."
+            else:
+                return 0, None
+    return 0, None
+
+
+def _outreach_timing(permit: CanonicalPermit) -> str:
+    """
+    Translate permit status into language that tells Tre when to act,
+    not where the permit is in a bureaucratic process.
+    """
+    # "Ready to Issue" is canonical APPROVED but warrants special urgency.
+    raw_status = permit.raw_data.get("status_desc", "")
+    if raw_status == "Ready to Issue":
+        return "Act now — permit imminent"
+    if permit.permit_status in (PermitStatus.UNDER_REVIEW, PermitStatus.SUBMITTED):
+        return "Early — in plan review"
+    if permit.permit_status == PermitStatus.APPROVED:
+        return "Mid — approved, pre-construction"
+    if permit.permit_status in (PermitStatus.ISSUED, PermitStatus.FINAL):
+        return "Late — construction may have started"
+    return "Early — in plan review"  # safe default
 
 
 # ── Output types ──────────────────────────────────────────────────────────────
@@ -143,15 +241,21 @@ class ScoredPermit:
     relevance: RelevanceLevel
     relevance_reasons: list[str]             # bullet points explaining the score
 
+    # Enrichment
+    opportunity_stage: str                   # outreach timing language for Tre
+    keyword_signals: list[str]               # high-signal keywords found in work_desc
+
     def to_dict(self) -> dict:
         d = self.permit.to_dict()
         d.update({
-            "ordinance_triggered": self.ordinance_triggered,
-            "ordinance_name":      self.ordinance_name,
-            "art_budget_display":  self.art_budget_display,
-            "budget_basis":        self.budget_basis,
-            "relevance":           self.relevance.value,
-            "relevance_reasons":   self.relevance_reasons,
+            "ordinance_triggered":  self.ordinance_triggered,
+            "ordinance_name":       self.ordinance_name,
+            "art_budget_display":   self.art_budget_display,
+            "budget_basis":         self.budget_basis,
+            "relevance":            self.relevance.value,
+            "relevance_reasons":    self.relevance_reasons,
+            "opportunity_stage":    self.opportunity_stage,
+            "keyword_signals":      self.keyword_signals,
         })
         return d
 
@@ -192,7 +296,7 @@ def score_permit(
     ord_result = _match_ordinances(permit, ordinances)
 
     # ── Step 2: compute relevance score ──────────────────────────────────────
-    score, reasons = _compute_score(permit, ord_result)
+    score, reasons, keyword_signals = _compute_score(permit, ord_result)
 
     # ── Step 3: map score to RelevanceLevel ───────────────────────────────────
     # Immediately disqualify cases where art commissioning is implausible.
@@ -235,6 +339,8 @@ def score_permit(
         budget_basis=budget_basis,
         relevance=relevance,
         relevance_reasons=reasons,
+        opportunity_stage=_outreach_timing(permit),
+        keyword_signals=keyword_signals,
     )
 
 
@@ -366,10 +472,11 @@ def _is_irrelevant(permit: CanonicalPermit) -> bool:
 def _compute_score(
     permit: CanonicalPermit,
     ord_result: OrdMatchResult,
-) -> tuple[int, list[str]]:
+) -> tuple[int, list[str], list[str]]:
     """
-    Compute a composite integer score and a list of plain-English reasons.
-    Higher is more relevant.
+    Compute a composite integer score, a list of plain-English reasons,
+    and a list of matched high-signal keywords.
+    Higher score is more relevant.
     """
     score = 0
     reasons: list[str] = []
@@ -432,7 +539,21 @@ def _compute_score(
             "mid-scale project, meaningful art budget possible."
         )
 
-    return score, reasons
+    # Keyword signals from work description
+    kw_delta, matched_kws = _keyword_score(permit.project_description)
+    score += kw_delta
+    if matched_kws:
+        reasons.append(
+            f"Work description signals: {', '.join(matched_kws)}."
+        )
+
+    # Square footage
+    sqft_delta, sqft_reason = _sqft_score(permit.raw_data)
+    score += sqft_delta
+    if sqft_reason:
+        reasons.append(sqft_reason)
+
+    return score, reasons, matched_kws
 
 
 # ── Budget formatting ─────────────────────────────────────────────────────────
