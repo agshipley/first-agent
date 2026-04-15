@@ -119,15 +119,25 @@ class SocrataConnector(BaseConnector):
 
         all_permits: list[CanonicalPermit] = []
         seen_ids: set[str] = set()
+        errors: list[str] = []
 
         for dataset in datasets_to_query:
-            rows = self._fetch_raw(dataset, filters)
-            fetched_at = datetime.utcnow()
-            for row in rows:
-                permit = self._normalize(row, dataset, fetched_at)
-                if permit and permit.permit_id not in seen_ids:
-                    all_permits.append(permit)
-                    seen_ids.add(permit.permit_id)
+            try:
+                rows = self._fetch_raw(dataset, filters)
+                fetched_at = datetime.utcnow()
+                for row in rows:
+                    permit = self._normalize(row, dataset, fetched_at)
+                    if permit and permit.permit_id not in seen_ids:
+                        # Apply valuation filter post-fetch (since valuation is text in source)
+                        if filters.min_valuation > 0 and (permit.valuation is None or permit.valuation < filters.min_valuation):
+                            continue
+                        all_permits.append(permit)
+                        seen_ids.add(permit.permit_id)
+            except Exception as exc:
+                errors.append(f"{dataset.role} dataset failed: {exc}")
+
+        if not all_permits and errors:
+            raise RuntimeError(f"Socrata fetch failed: {'; '.join(errors)}")
 
         # Sort: most recent first (filing_date for submitted, approval_date for issued)
         all_permits.sort(
@@ -175,8 +185,8 @@ class SocrataConnector(BaseConnector):
         """
         where = self._build_where(dataset, filters)
         order = f"{dataset.primary_sort_field} DESC"
-        # Fetch extra rows to compensate for the post-filter valuation drop-off
-        fetch_limit = min(filters.limit * 10, 2000)
+        # Fetch with $limit=1000 to reduce response size
+        fetch_limit = 1000
 
         cache_key = (self._dataset_url(dataset), where, order, str(fetch_limit))
         cached = _cache.get(cache_key)
@@ -188,8 +198,8 @@ class SocrataConnector(BaseConnector):
         query = {"$where": where, "$order": order, "$limit": fetch_limit}
         url = self._dataset_url(dataset)
 
-        # 10 s connect, 45 s read — issued dataset is slower than submitted.
-        timeout = httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=10.0)
+        # 10 s connect, 30 s read — issued dataset is slower than submitted.
+        timeout = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
         last_exc: Exception | None = None
         for attempt in range(2):  # one retry on timeout
             try:

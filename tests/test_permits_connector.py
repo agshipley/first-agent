@@ -235,8 +235,33 @@ class TestErrorHandling:
                 min_valuation=5_000_000, permit_type="all", occupancy_type="all",
                 status_category="pipeline", date_from="", limit=10, source="submitted",
             )
-            with pytest.raises(RuntimeError, match="Socrata fetch error"):
+            with pytest.raises(RuntimeError, match="Socrata fetch timed out after 2 attempts"):
                 connector.fetch(filters)
+
+    def test_independent_dataset_failures(self):
+        """When source='both', if one dataset fails, the other should still return results."""
+        connector = SocrataConnector(LA_CONFIG)
+        import httpx
+
+        # Mock submitted dataset to succeed, issued to timeout
+        submitted_rows = [{"permit_nbr": "SUB-001", "work_desc": "Test", "primary_address": "123 Main", "submitted_date": "2026-01-01T00:00:00.000", "permit_type": "Bldg-New", "status_desc": "PC Info Complete", "permit_sub_type": "Commercial", "valuation": "10000000"}]
+        issued_rows = []  # Not reached due to timeout
+
+        with patch.object(connector, "_fetch_raw") as mock_fetch_raw:
+            # submitted succeeds
+            mock_fetch_raw.side_effect = [
+                submitted_rows,  # submitted dataset
+                httpx.TimeoutException("timeout")  # issued dataset fails
+            ]
+
+            filters = ConnectorFilters(
+                min_valuation=5_000_000, permit_type="all", occupancy_type="all",
+                status_category="pipeline", date_from="", limit=10, source="both",
+            )
+            permits = connector.fetch(filters)
+            # Should get the permit from submitted dataset
+            assert len(permits) == 1
+            assert permits[0].permit_id == "SUB-001"
 
 
 # ── $where clause building ────────────────────────────────────────────────────
