@@ -5,6 +5,7 @@ All HTTP calls are mocked — no real Socrata requests.
 
 import pytest
 from datetime import datetime
+from time import time
 from unittest.mock import patch, MagicMock
 
 from permits.schema import PermitType, PermitStatus, OccupancyType
@@ -300,3 +301,139 @@ class TestWhereClause:
         )
         where = connector._build_where(dataset, filters)
         assert "2025-01-01" in where
+
+
+class TestFetchRawAndNormalization:
+
+    def _connector(self):
+        return SocrataConnector(LA_CONFIG)
+
+    def test_fetch_raw_success_returns_rows(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        fake_rows = [
+            {
+                "permit_nbr": "SUCCESS-001",
+                "work_desc": "Test project",
+                "primary_address": "123 Main St",
+                "submitted_date": "2026-01-01T00:00:00.000",
+                "permit_type": "Bldg-New",
+                "status_desc": "PC Info Complete",
+                "permit_sub_type": "Commercial",
+                "valuation": "6000000",
+            }
+        ]
+
+        fake_resp = MagicMock()
+        fake_resp.raise_for_status.return_value = None
+        fake_resp.json.return_value = fake_rows
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.get.return_value = fake_resp
+            _cache.clear()
+
+            filters = ConnectorFilters(
+                min_valuation=5_000_000, permit_type="all", occupancy_type="all",
+                status_category="pipeline", date_from="", limit=10, source="submitted",
+            )
+            rows = connector._fetch_raw(dataset, filters)
+
+        assert rows == fake_rows
+
+    def test_fetch_raw_uses_cache_when_available(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        filters = ConnectorFilters(
+            min_valuation=0, permit_type="all", occupancy_type="all",
+            status_category="pipeline", date_from="", limit=10, source="submitted",
+        )
+        key = (
+            connector._dataset_url(dataset),
+            connector._build_where(dataset, filters),
+            "submitted_date DESC",
+            "1000",
+        )
+        cached_rows = [{"permit_nbr": "CACHED-001"}]
+        _cache[key] = (time(), cached_rows)
+
+        rows = connector._fetch_raw(dataset, filters)
+
+        assert rows == cached_rows
+
+    def test_fetch_raw_raises_for_non_list_response(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+
+        fake_resp = MagicMock()
+        fake_resp.raise_for_status.return_value = None
+        fake_resp.json.return_value = {"error": "bad response"}
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.get.return_value = fake_resp
+            _cache.clear()
+
+            filters = ConnectorFilters(
+                min_valuation=0, permit_type="all", occupancy_type="all",
+                status_category="pipeline", date_from="", limit=10, source="submitted",
+            )
+            with pytest.raises(RuntimeError, match="Unexpected Socrata response"):
+                connector._fetch_raw(dataset, filters)
+
+    def test_fetch_skips_permits_below_min_valuation_after_normalization(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        low_valuation_row = {**SAMPLE_ROW, "valuation": "4000000"}
+
+        with patch.object(connector, "_fetch_raw", return_value=[low_valuation_row]):
+            filters = ConnectorFilters(
+                min_valuation=5_000_000, permit_type="all", occupancy_type="all",
+                status_category="pipeline", date_from="", limit=10, source="submitted",
+            )
+            permits = connector.fetch(filters)
+
+        assert permits == []
+
+    def test_normalize_uses_use_desc_fallback_for_occupancy(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        row = {**SAMPLE_ROW, "permit_sub_type": "Unknown", "use_desc": "Office"}
+        permit = connector._normalize(row, dataset, datetime.utcnow())
+
+        assert permit is not None
+        assert permit.occupancy_type.name == "COMMERCIAL"
+
+    def test_normalize_handles_invalid_coordinates_and_dates_gracefully(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["issued"]
+        row = {
+            **SAMPLE_ROW,
+            "lat": "not-a-number",
+            "lon": "also-bad",
+            "submitted_date": "invalid-date",
+            "issue_date": "not-a-date",
+        }
+        permit = connector._normalize(row, dataset, datetime.utcnow())
+
+        assert permit is not None
+        assert permit.latitude is None
+        assert permit.longitude is None
+        assert permit.filing_date is None
+        assert permit.approval_date is None
+
+    def test_build_where_includes_issue_status_and_type_filters(self):
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        filters = ConnectorFilters(
+            min_valuation=0, permit_type="new", occupancy_type="commercial",
+            status_category="issued", date_from="2025-01-01", limit=50, source="submitted",
+        )
+        where = connector._build_where(dataset, filters)
+
+        assert "Bldg-New" in where
+        assert "Commercial" in where
+        assert "status_desc in(" in where
+        assert "submitted_date>='2025-01-01T00:00:00.000'" in where
