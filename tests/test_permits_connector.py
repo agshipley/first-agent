@@ -12,6 +12,7 @@ from permits.schema import PermitType, PermitStatus, OccupancyType
 from permits.connectors.base import ConnectorFilters
 from permits.connectors.socrata import SocrataConnector, _cache
 from permits.connectors.cities.los_angeles import LA_CONFIG, la_connector
+from permits.connectors.cities.new_york import NYC_CONFIG
 
 
 # ── LA configuration ───────────────────────────────────────────────────────────
@@ -45,6 +46,25 @@ class TestLAConfiguration:
     def test_default_permit_types_includes_new_and_alteration(self):
         assert "Bldg-New" in LA_CONFIG.default_permit_types
         assert "Bldg-Alter/Repair" in LA_CONFIG.default_permit_types
+
+
+class TestNYCConfiguration:
+
+    def test_has_submitted_and_issued_datasets(self):
+        assert "submitted" in NYC_CONFIG.datasets
+        assert "issued" in NYC_CONFIG.datasets
+        assert NYC_CONFIG.datasets["submitted"].id == "w9ak-ipjd"
+        assert NYC_CONFIG.datasets["issued"].id == "rbx6-tga4"
+
+    def test_public_sector_owner_patterns_defined(self):
+        assert isinstance(NYC_CONFIG.public_sector_owner_patterns, list)
+        assert "DDC" in NYC_CONFIG.public_sector_owner_patterns
+        assert "DOE" in NYC_CONFIG.public_sector_owner_patterns
+
+    def test_field_map_has_owner_and_applicant_fields(self):
+        required = {"permit_id", "project_description", "address", "owner_name", "applicant_name"}
+        for key in required:
+            assert key in NYC_CONFIG.field_map, f"NYC field_map missing '{key}'"
 
 
 # ── Normalisation from fake API responses ─────────────────────────────────────
@@ -125,6 +145,67 @@ class TestNormalization:
         assert permit is not None
         assert permit.latitude is None
         assert permit.longitude is None
+
+
+class TestNYCNormalization:
+
+    def test_submitted_row_normalizes_and_injects_public_patterns(self):
+        from permits.connectors.cities.new_york import NYC_CONFIG
+        connector = SocrataConnector(NYC_CONFIG)
+        dataset = NYC_CONFIG.datasets["submitted"]
+        row = {
+            "job_filing_number": "NYC-001",
+            "job_type": "New Building",
+            "filing_status": "LOC Issued",
+            "building_type": "Office",
+            "initial_cost": "15000000",
+            "job_description": "New office building with public lobby",
+            "house_no": "1086",
+            "street_name": "DECATUR STREET",
+            "borough": "BROOKLYN",
+            "zip": "11423",
+            "owner_s_business_name": "NYC Department of Transportation",
+            "latitude": "40.686474",
+            "longitude": "-73.909788",
+            "filing_date": "2024-06-01T00:00:00.000",
+            "approved_date": "2024-06-15T00:00:00.000",
+        }
+        permit = connector._normalize(row, dataset, datetime.utcnow())
+
+        assert permit is not None
+        assert permit.permit_id == "NYC-001"
+        assert permit.city == "New York"
+        assert permit.owner_name == "NYC Department of Transportation"
+        assert permit.valuation == pytest.approx(15_000_000.0)
+        assert permit.address == "1086 DECATUR STREET, BROOKLYN, 11423"
+        assert permit.raw_data["public_sector_owner_patterns"] == NYC_CONFIG.public_sector_owner_patterns
+
+    def test_issued_row_normalizes_with_owner_business_name(self):
+        from permits.connectors.cities.new_york import NYC_CONFIG
+        connector = SocrataConnector(NYC_CONFIG)
+        dataset = NYC_CONFIG.datasets["issued"]
+        row = {
+            "job_filing_number": "NYC-002",
+            "work_type": "General Construction",
+            "permit_status": "Signed-off",
+            "building_type": "Hospital",
+            "estimated_job_costs": "25000000",
+            "job_description": "Renovation of hospital main entrance",
+            "house_no": "1",
+            "street_name": "EAST 16 STREET",
+            "borough": "MANHATTAN",
+            "zip_code": "10003",
+            "owner_business_name": "NYC Health + Hospitals",
+            "latitude": "40.733707",
+            "longitude": "-73.990994",
+            "issued_date": "2024-05-16T00:00:00.000",
+        }
+        permit = connector._normalize(row, dataset, datetime.utcnow())
+
+        assert permit is not None
+        assert permit.owner_name == "NYC Health + Hospitals"
+        assert permit.valuation == pytest.approx(25_000_000.0)
+        assert permit.address == "1 EAST 16 STREET, MANHATTAN, 10003"
 
 
 # ── Deduplication ──────────────────────────────────────────────────────────────

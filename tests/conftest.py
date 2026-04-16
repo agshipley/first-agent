@@ -146,6 +146,8 @@ def make_permit(
     data_source="LADBS/gwh9-jnip",
     raw_data=None,
     filing_date=None,
+    owner_name=None,
+    applicant_name=None,
 ):
     """
     Build a CanonicalPermit with sensible defaults for testing.
@@ -166,6 +168,8 @@ def make_permit(
         fetched_at=datetime(2026, 4, 12, 12, 0, 0),
         raw_data=raw_data or {},
         filing_date=filing_date or date(2026, 1, 15),
+        owner_name=owner_name,
+        applicant_name=applicant_name,
     )
 
 

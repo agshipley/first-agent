@@ -15,7 +15,7 @@ import time
 import httpx
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, Union
 
 from permits.schema import (
     CanonicalPermit,
@@ -61,10 +61,10 @@ class SocrataConfig:
     datasets: dict[str, SocrataDataset]  # keyed by role: "submitted", "issued"
 
     # Source field names used in $where clauses
-    permit_type_field: str
-    status_field: str
-    occupancy_type_field: str
-    valuation_field: str
+    permit_type_field: Union[str, dict[str, str]]
+    status_field: Union[str, dict[str, str]]
+    occupancy_type_field: Union[str, dict[str, str]]
+    valuation_field: Union[str, dict[str, str]]
 
     # Normalization: canonical_key → source_field_name
     field_map: dict[str, str]
@@ -73,6 +73,10 @@ class SocrataConfig:
     permit_type_map: dict[str, str]
     permit_status_map: dict[str, str]
     occupancy_type_map: dict[str, str]
+
+    # Optional owner/applicant patterns used by city-specific connectors to
+    # flag public sector projects for ordinance matching.
+    public_sector_owner_patterns: list[str] = field(default_factory=list)
 
     # Optional: which permit_type and occupancy_type source values to include
     # by default when "all" is selected. If empty, no filter is applied.
@@ -148,6 +152,18 @@ class SocrataConnector(BaseConnector):
         return all_permits[:filters.limit]
 
     def get_metadata(self) -> ConnectorMetadata:
+        available_fields: list[str] = []
+        for field in [
+            self._cfg.permit_type_field,
+            self._cfg.status_field,
+            self._cfg.occupancy_type_field,
+            self._cfg.valuation_field,
+        ]:
+            if isinstance(field, dict):
+                available_fields.extend(field.values())
+            else:
+                available_fields.append(field)
+
         return ConnectorMetadata(
             city=self._cfg.city,
             state=self._cfg.state,
@@ -162,12 +178,7 @@ class SocrataConnector(BaseConnector):
                 for ds in self._cfg.datasets.values()
             ],
             data_freshness=self._cfg.data_freshness,
-            available_filter_fields=[
-                self._cfg.permit_type_field,
-                self._cfg.status_field,
-                self._cfg.occupancy_type_field,
-                self._cfg.valuation_field,
-            ],
+            available_filter_fields=available_fields,
             known_limitations=self._cfg.known_limitations,
         )
 
@@ -175,6 +186,12 @@ class SocrataConnector(BaseConnector):
 
     def _dataset_url(self, dataset: SocrataDataset) -> str:
         return f"https://{self._cfg.socrata_domain}/resource/{dataset.id}.json"
+
+    @staticmethod
+    def _resolve_field(field: Union[str, dict[str, str]], dataset: SocrataDataset) -> str:
+        if isinstance(field, dict):
+            return field.get(dataset.role) or next(iter(field.values()), "")
+        return field
 
     def _fetch_raw(
         self, dataset: SocrataDataset, filters: ConnectorFilters
@@ -234,13 +251,15 @@ class SocrataConnector(BaseConnector):
         clauses: list[str] = []
 
         # Valuation pre-filter (text field — exact threshold applied post-fetch)
-        if filters.min_valuation > 0:
+        valuation_field = self._resolve_field(cfg.valuation_field, dataset)
+        if filters.min_valuation > 0 and valuation_field:
             prefilter_len = len(str(int(filters.min_valuation)))
             clauses.append(
-                f"length({cfg.valuation_field}) >= {prefilter_len}"
+                f"length({valuation_field}) >= {prefilter_len}"
             )
 
         # Permit type filter
+        permit_type_field = self._resolve_field(cfg.permit_type_field, dataset)
         if filters.permit_type != "all":
             type_ui_map = {
                 "new": "Bldg-New",
@@ -252,17 +271,18 @@ class SocrataConnector(BaseConnector):
                 clauses.append(f"{cfg.permit_type_field}='{raw_type}'")
         elif cfg.default_permit_types:
             vals = ", ".join(f"'{v}'" for v in cfg.default_permit_types)
-            clauses.append(f"{cfg.permit_type_field} in({vals})")
+            clauses.append(f"{permit_type_field} in({vals})")
 
         # Occupancy type filter
+        occupancy_type_field = self._resolve_field(cfg.occupancy_type_field, dataset)
         if filters.occupancy_type != "all":
             occ_ui_map = {"commercial": "Commercial", "apartment": "Apartment"}
             raw_occ = occ_ui_map.get(filters.occupancy_type)
             if raw_occ:
-                clauses.append(f"{cfg.occupancy_type_field}='{raw_occ}'")
-        elif cfg.default_occupancy_types:
+                clauses.append(f"{occupancy_type_field}='{raw_occ}'")
+        elif cfg.default_occupancy_types and occupancy_type_field:
             vals = ", ".join(f"'{v}'" for v in cfg.default_occupancy_types)
-            clauses.append(f"{cfg.occupancy_type_field} in({vals})")
+            clauses.append(f"{occupancy_type_field} in({vals})")
 
         # Status filter
         if filters.status_category == "pipeline":
@@ -273,8 +293,10 @@ class SocrataConnector(BaseConnector):
             statuses = set()
 
         if statuses:
-            vals = ", ".join(f"'{s}'" for s in sorted(statuses))
-            clauses.append(f"{cfg.status_field} in({vals})")
+            status_field = self._resolve_field(cfg.status_field, dataset)
+            if status_field:
+                vals = ", ".join(f"'{s}'" for s in sorted(statuses))
+                clauses.append(f"{status_field} in({vals})")
 
         # Date filter — applied to the dataset's primary sort field
         if filters.date_from:
@@ -297,7 +319,14 @@ class SocrataConnector(BaseConnector):
         fm = cfg.field_map
 
         # Valuation — parse text to float, post-filter handled by caller
-        valuation = self._parse_valuation(row.get(cfg.valuation_field))
+        valuation_key = self._resolve_field(cfg.valuation_field, dataset)
+        valuation = self._parse_valuation(row.get(valuation_key))
+
+        if cfg.public_sector_owner_patterns:
+            raw_data = dict(row)
+            raw_data["public_sector_owner_patterns"] = cfg.public_sector_owner_patterns
+        else:
+            raw_data = row
 
         # CanonicalPermit requires a permit_id
         permit_id = row.get(fm.get("permit_id", "permit_nbr"), "").strip()
@@ -305,20 +334,31 @@ class SocrataConnector(BaseConnector):
             return None
 
         # Enum mappings with defaults
-        raw_type = row.get(fm.get("permit_type_raw", cfg.permit_type_field), "")
+        raw_type = row.get(
+            fm.get("permit_type_raw", ""),
+            row.get(self._resolve_field(cfg.permit_type_field, dataset), "")
+        )
+        if not raw_type:
+            raw_type = row.get("work_type", "") or row.get("job_type", "")
         permit_type = PermitType(
             cfg.permit_type_map.get(raw_type, "OTHER")
         )
 
-        raw_status = row.get(fm.get("permit_status_raw", cfg.status_field), "")
+        raw_status = row.get(
+            fm.get("permit_status_raw", ""),
+            row.get(self._resolve_field(cfg.status_field, dataset), "")
+        )
         permit_status = PermitStatus(
             cfg.permit_status_map.get(raw_status, "UNDER_REVIEW")
         )
 
-        raw_occ = row.get(fm.get("occupancy_type_raw", cfg.occupancy_type_field), "")
-        # Fall back to use_desc if sub_type doesn't map cleanly
+        raw_occ = row.get(
+            fm.get("occupancy_type_raw", ""),
+            row.get(self._resolve_field(cfg.occupancy_type_field, dataset), "")
+        )
+        # Fall back to use_desc / building_type if sub_type doesn't map cleanly
         if not raw_occ or raw_occ not in cfg.occupancy_type_map:
-            raw_occ = row.get("use_desc", "")
+            raw_occ = row.get("use_desc", "") or row.get("building_type", "") or raw_occ
         occupancy_type = OccupancyType(
             cfg.occupancy_type_map.get(raw_occ, "OTHER")
         )
@@ -330,6 +370,29 @@ class SocrataConnector(BaseConnector):
             latitude = self._parse_float(row.get(fm.get("latitude", "lat")))
             longitude = self._parse_float(row.get(fm.get("longitude", "lon")))
 
+        project_description = (
+            row.get(fm.get("project_description", "work_desc"), "")
+            or row.get("job_description", "")
+            or row.get("work_desc", "")
+            or row.get("work_type", "")
+            or row.get("job_type", "")
+        )
+        address = row.get(fm.get("address", "primary_address"), "")
+        if not address:
+            address = self._build_address(row)
+
+        applicant_name = (
+            row.get(fm.get("applicant_name", ""), "")
+            or row.get("applicant_business_name", "")
+            or self._concat_name(row, "applicant_first_name", "applicant_last_name")
+        ) or None
+        owner_name = (
+            row.get(fm.get("owner_name", ""), "")
+            or row.get("owner_business_name", "")
+            or row.get("owner_s_business_name", "")
+            or row.get("owner_name", "")
+        ) or None
+
         return CanonicalPermit(
             permit_id=permit_id,
             city=cfg.city,
@@ -337,14 +400,14 @@ class SocrataConnector(BaseConnector):
             jurisdiction=cfg.jurisdiction,
             permit_type=permit_type,
             permit_status=permit_status,
-            project_description=row.get(fm.get("project_description", "work_desc"), ""),
-            address=row.get(fm.get("address", "primary_address"), ""),
+            project_description=project_description,
+            address=address,
             latitude=latitude,
             longitude=longitude,
             valuation=valuation,
             occupancy_type=occupancy_type,
-            applicant_name=row.get(fm.get("applicant_name", ""), None) or None,
-            owner_name=row.get(fm.get("owner_name", ""), None) or None,
+            applicant_name=applicant_name,
+            owner_name=owner_name,
             filing_date=self._parse_date(
                 row.get(fm.get("filing_date", "submitted_date"))
             ),
@@ -352,7 +415,7 @@ class SocrataConnector(BaseConnector):
                 row.get(fm.get("approval_date", "issue_date"))
             ),
             data_source=f"{cfg.socrata_domain}/{dataset.id}",
-            raw_data=row,
+            raw_data=raw_data,
             fetched_at=fetched_at,
         )
 
@@ -376,6 +439,28 @@ class SocrataConnector(BaseConnector):
             return float(raw)
         except (ValueError, TypeError):
             return None
+
+    @staticmethod
+    def _concat_name(row: dict, first_key: str, last_key: str) -> Optional[str]:
+        first = (row.get(first_key) or "").strip()
+        last = (row.get(last_key) or "").strip()
+        if not first and not last:
+            return None
+        return " ".join([part for part in [first, last] if part])
+
+    @staticmethod
+    def _build_address(row: dict) -> str:
+        house = (row.get("house_no") or row.get("house__") or "").strip()
+        street = (row.get("street_name") or "").strip()
+        borough = (row.get("borough") or "").strip()
+        zip_code = (row.get("zip_code") or row.get("zip") or "").strip()
+        street_address = " ".join(part for part in [house, street] if part)
+        parts = [street_address] if street_address else []
+        if borough:
+            parts.append(borough)
+        if zip_code:
+            parts.append(zip_code)
+        return ", ".join(parts)
 
     @staticmethod
     def _parse_date(raw: object) -> Optional[date]:

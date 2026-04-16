@@ -35,5 +35,22 @@
     "source_url": "https://culturela.org/programs-initiatives/public-art/",
     "notes": "1% of the construction cost of public capital improvement projects is allocated to public art. Administered by DCA in coordination with the relevant city department. Applies to projects funded by the City of Los Angeles capital budget.",
     "last_verified": "2026-04-12"
-  }
+    },
+    {
+        "city": "New York",
+        "state": "NY",
+        "ordinance_name": "NYC Public Art Allocation for Public Capital Projects",
+        "administering_body": "NYC Department of Cultural Affairs (DCLA)",
+        "percentage": 0.01,
+        "applies_to": ["PUBLIC_CAPITAL_PROJECTS"],
+        "valuation_threshold": null,
+        "project_types": [
+            "Public Capital Projects"
+        ],
+        "in_lieu_fee_option": false,
+        "in_lieu_fee_percentage": null,
+        "source_url": "https://www.nyc.gov/site/dcla/about/public-art.page",
+        "notes": "New York City DCLA administers a 1% public art allocation for eligible city-funded capital construction. The program is limited to public sector projects and requires owner/applicant identification as a city agency or public authority.",
+        "last_verified": "2026-04-15"
+    }
 ]

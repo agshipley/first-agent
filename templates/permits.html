@@ -420,6 +420,7 @@
 
         /* ── Action button ── */
         .btn-deep-dive {
+            display: inline-block;
             padding: 8px 16px;
             border-radius: 50px;
             font-family: 'DM Sans', sans-serif;
@@ -431,6 +432,11 @@
             color: var(--black);
             transition: all 0.2s;
             white-space: nowrap;
+            text-decoration: none;
+        }
+
+        .btn-deep-dive:hover {
+            background: var(--pink-dark);
         }
 
         .btn-deep-dive:hover {
@@ -672,7 +678,7 @@
                         return;
                     }
 
-                    renderResults(data.permits || [], currentSource);
+                    renderResults(data.permits || [], currentSource, data.data_freshness || '');
                 })
                 .catch(err => {
                     btn.disabled = false;
@@ -683,7 +689,7 @@
         }
 
         // ── Render ─────────────────────────────────────────────────────────────
-        function renderResults(permits, source) {
+        function renderResults(permits, source, dataFreshness) {
             const area = document.getElementById('resultsArea');
             const meta = document.getElementById('resultsMeta');
             const count = document.getElementById('resultsCount');
@@ -697,6 +703,15 @@
             count.textContent =
                 permits.length + ' opportunit' + (permits.length === 1 ? 'y' : 'ies');
             meta.style.display = 'flex';
+            
+            // Update freshness text if available
+            const freshnessNote = dataFreshness
+                ? `Most recent filing: ${dataFreshness} · Permit filings typically appear within 1–2 weeks of submission · Source: LADBS via data.lacity.org`
+                : 'Source: LADBS via data.lacity.org';
+            const cacheNoteEl = meta.querySelector('.cache-note');
+            if (cacheNoteEl) {
+                cacheNoteEl.innerHTML = 'Sorted by estimated art budget · Data cached 1 hr · ' + freshnessNote;
+            }
 
             const dateKey = source === 'submitted' ? 'filing_date' : 'approval_date';
 
@@ -709,9 +724,6 @@
                 const whyHtml       = whyItScoredHtml(p.relevance_reasons || []);
                 const budgetHtml    = budgetCellHtml(p);
                 const dateStr       = formatDate(p[dateKey]);
-                const ladbsUrl      = p.permit_id
-                    ? `https://epermits.ladbs.org/PermitStatus/Details/${encodeURIComponent(p.permit_id)}`
-                    : '';
 
                 return `<tr>
                     <td class="td-project">
@@ -725,8 +737,7 @@
                     <td class="td-value">${escHtml(p.valuation_display || '')}</td>
                     <td class="td-date">${escHtml(dateStr)}</td>
                     <td>
-                        <button class="btn-deep-dive" onclick="sendToLeadSearch(${JSON.stringify(p.address)})">Deep Dive →</button>
-                        ${ladbsUrl ? `<a class="btn-permit" href="${escHtml(ladbsUrl)}" target="_blank" rel="noopener">Permit ↗</a>` : ''}
+                        <a class="btn-deep-dive" href="/" target="_blank" rel="noopener" title="Open Lead Finder">Deep Dive →</a>
                     </td>
                 </tr>`;
             }).join('');

@@ -107,11 +107,23 @@ def api_permits():
                 ]
             permit_dicts.append(d)
 
+        # Determine data freshness: use most recent filing date from results
+        freshness_text = ""
+        if permit_dicts:
+            recent_dates = [
+                sp.permit.filing_date for sp in opportunities
+                if sp.permit.filing_date
+            ]
+            if recent_dates:
+                most_recent = max(recent_dates)
+                freshness_text = most_recent.strftime("%B %d, %Y")
+
         return jsonify({
             "permits": permit_dicts,
             "count": len(opportunities),
             "source": filters.source,
             "status_category": filters.status_category,
+            "data_freshness": freshness_text,
         })
 
     except RuntimeError as exc:

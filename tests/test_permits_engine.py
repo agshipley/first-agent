@@ -136,6 +136,45 @@ class TestOrdinanceMatching:
         result = _match_ordinances(permit, la_ordinances)
         assert result.triggered is False
 
+    def test_nyc_public_sector_owner_triggers_nyc_ordinance(self):
+        ordinances = load_ordinances()
+        permit = make_permit(
+            city="New York",
+            state="NY",
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=20_000_000.0,
+            owner_name="NYC Department of Transportation",
+            project_description="City-funded transit facility renovation",
+            raw_data={
+                "public_sector_owner_patterns": [
+                    "DDC", "DOE", "DOT", "Department of Transportation",
+                    "NYCHA", "MTA", "DCAS", "Health + Hospitals",
+                ]
+            },
+        )
+        result = _match_ordinances(permit, ordinances)
+        assert result.triggered is True
+        assert result.ordinance_name.startswith("NYC Public Art Allocation")
+
+    def test_nyc_private_owner_does_not_trigger_public_capital_ordinance(self):
+        ordinances = load_ordinances()
+        permit = make_permit(
+            city="New York",
+            state="NY",
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=20_000_000.0,
+            owner_name="Acme Development LLC",
+            project_description="Private office renovation in Manhattan",
+            raw_data={
+                "public_sector_owner_patterns": [
+                    "DDC", "DOE", "DOT", "NYCHA", "MTA", "DCAS",
+                    "Health + Hospitals",
+                ]
+            },
+        )
+        result = _match_ordinances(permit, ordinances)
+        assert result.triggered is False
+
     def test_apartment_above_threshold_triggers_padfp(self, la_ordinances):
         """Apartments are listed in PADFP project_types."""
         permit = make_permit(

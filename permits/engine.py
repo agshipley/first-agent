@@ -465,6 +465,21 @@ def _match_ordinances(permit: CanonicalPermit, ordinances: list[dict]) -> OrdMat
     return _check_ordinance(permit, city_ordinances[0])
 
 
+def _matches_public_sector_owner(permit: CanonicalPermit, patterns: list[str]) -> bool:
+    """Return True when the permit owner or applicant matches a public-sector pattern."""
+    if not patterns:
+        return False
+    candidate = " ".join(
+        part for part in [permit.owner_name, permit.applicant_name] if part
+    ).lower()
+    if not candidate:
+        return False
+    for pattern in patterns:
+        if pattern.lower() in candidate:
+            return True
+    return False
+
+
 def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
     """Check whether a single ordinance applies to this permit."""
     name = ord_data.get("ordinance_name", "Unknown Ordinance")
@@ -502,7 +517,24 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
     )
     type_match = any(t in applicable_types for t in occupancy_types_for_permit)
 
-    if not type_match:
+    public_patterns = permit.raw_data.get("public_sector_owner_patterns", [])
+    public_owner_match = False
+    if public_patterns and "Public Capital Projects" in applicable_types:
+        public_owner_match = _matches_public_sector_owner(permit, public_patterns)
+        if not type_match and not public_owner_match:
+            return OrdMatchResult(
+                triggered=False,
+                ordinance_name=name,
+                ordinance_percentage=pct,
+                art_budget_low=None,
+                art_budget_high=None,
+                reason=(
+                    "Public sector owner/applicant not identified — "
+                    f"{name} applies only to city or public authority projects."
+                ),
+            )
+
+    if not type_match and not public_owner_match:
         return OrdMatchResult(
             triggered=False,
             ordinance_name=name,
