@@ -98,6 +98,10 @@
             max-width: 680px;
         }
 
+        .page-description a {
+            color: var(--black);
+        }
+
         /* ── Source toggle ── */
         .source-toggle {
             display: flex;
@@ -174,52 +178,6 @@
         .filter-select:focus, .filter-input:focus {
             outline: none;
             border-color: var(--pink-dark);
-        }
-
-        /* ── PADFP toggle switch ── */
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 48px;
-            height: 26px;
-            cursor: pointer;
-            margin-top: 4px;
-        }
-
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-            position: absolute;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            inset: 0;
-            background: var(--gray-light);
-            border-radius: 50px;
-            border: 2px solid var(--black);
-            transition: background 0.2s;
-        }
-
-        .toggle-slider::before {
-            content: "";
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            left: 3px;
-            top: 3px;
-            background: var(--black);
-            border-radius: 50%;
-            transition: transform 0.2s;
-        }
-
-        .toggle-switch input:checked + .toggle-slider {
-            background: var(--pink);
-        }
-
-        .toggle-switch input:checked + .toggle-slider::before {
-            transform: translateX(22px);
         }
 
         .fetch-btn {
@@ -439,10 +397,6 @@
             background: var(--pink-dark);
         }
 
-        .btn-deep-dive:hover {
-            background: var(--pink-dark);
-        }
-
         .btn-permit {
             display: block;
             margin-top: 6px;
@@ -523,10 +477,10 @@
 
     <main class="main">
         <div class="page-title">
-            <span class="prefix">Los Angeles / </span><span class="title">Art Commissioning Opportunities</span>
+            <span class="prefix" id="cityPrefix">Los Angeles / </span><span class="title">Art Commissioning Opportunities</span>
         </div>
-        <p class="page-description">
-            Live permit data from <a href="https://data.lacity.org" target="_blank" style="color:var(--black);">LADBS</a>, scored for art commissioning relevance.
+        <p class="page-description" id="pageDescription">
+            Live permit data from <a id="sourceLink" href="https://data.lacity.org" target="_blank">LADBS</a>, scored for art commissioning relevance.
             Sorted by estimated art budget — biggest opportunities first.
             Only High and Medium relevance permits are shown.
         </p>
@@ -543,6 +497,14 @@
 
         <!-- Filter bar -->
         <div class="filter-bar">
+            <div class="filter-group">
+                <span class="filter-label">City</span>
+                <select id="citySelect" class="filter-select" onchange="setCity(this.value)">
+                    <option value="los_angeles">Los Angeles</option>
+                    <option value="new_york">New York</option>
+                </select>
+            </div>
+
             <div class="filter-group">
                 <span class="filter-label">Est. Art Budget</span>
                 <select id="artBudgetMin" class="filter-select">
@@ -589,11 +551,12 @@
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Include PADFP</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="includeOrdinance">
-                    <span class="toggle-slider"></span>
-                </label>
+                <span class="filter-label">Project Sector</span>
+                <select id="sectorFilter" class="filter-select">
+                    <option value="all">All Projects</option>
+                    <option value="public">Public Sector (percent-for-art)</option>
+                    <option value="private">Private Development</option>
+                </select>
             </div>
 
             <div class="filter-group">
@@ -615,7 +578,7 @@
 
         <div class="results-meta" id="resultsMeta" style="display:none;">
             <span class="results-count" id="resultsCount"></span>
-            <span class="cache-note">Sorted by estimated art budget · Data cached 1 hr · Source: LADBS via data.lacity.org</span>
+            <span class="cache-note" id="cacheNote">Sorted by estimated art budget · Data cached 1 hr · Source: LADBS via data.lacity.org</span>
         </div>
 
         <div id="resultsArea">
@@ -629,8 +592,25 @@
     <div id="toast"></div>
 
     <script>
+        // ── City configuration ────────────────────────────────────────────────
+        const CITY_CONFIG = {
+            los_angeles: {
+                label: 'Los Angeles',
+                sourceLabel: 'LADBS via data.lacity.org',
+                sourceUrl: 'https://data.lacity.org',
+                sourceName: 'LADBS',
+            },
+            new_york: {
+                label: 'New York',
+                sourceLabel: 'NYC DOB via data.cityofnewyork.us',
+                sourceUrl: 'https://data.cityofnewyork.us',
+                sourceName: 'NYC DOB',
+            },
+        };
+
         // ── State ──────────────────────────────────────────────────────────────
         let currentSource = 'submitted';
+        let currentCity = 'los_angeles';
 
         function setSource(source) {
             currentSource = source;
@@ -638,6 +618,18 @@
             document.getElementById('btnIssued').classList.toggle('active', source === 'issued');
             document.getElementById('dateLabel').textContent =
                 source === 'submitted' ? 'Submitted After' : 'Permitted After';
+        }
+
+        function setCity(cityKey) {
+            currentCity = cityKey;
+            const cfg = CITY_CONFIG[cityKey] || CITY_CONFIG.los_angeles;
+            document.getElementById('cityPrefix').textContent = cfg.label + ' / ';
+            document.getElementById('sourceLink').href = cfg.sourceUrl;
+            document.getElementById('sourceLink').textContent = cfg.sourceName;
+            // Reset results when city changes
+            document.getElementById('resultsArea').innerHTML = '';
+            document.getElementById('resultsMeta').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
         }
 
         // ── Fetch ──────────────────────────────────────────────────────────────
@@ -655,6 +647,7 @@
             const statusCategory = currentSource === 'submitted' ? 'pipeline' : 'issued';
 
             const params = new URLSearchParams({
+                city: currentCity,
                 source: currentSource,
                 status_category: statusCategory,
                 art_budget_min: document.getElementById('artBudgetMin').value,
@@ -662,7 +655,7 @@
                 permit_type: document.getElementById('permitType').value,
                 occupancy_type: document.getElementById('occupancyType').value,
                 date_from: document.getElementById('dateFrom').value,
-                include_ordinance: document.getElementById('includeOrdinance').checked ? 'true' : 'false',
+                sector: document.getElementById('sectorFilter').value,
                 limit: document.getElementById('limit').value,
             });
 
@@ -678,7 +671,7 @@
                         return;
                     }
 
-                    renderResults(data.permits || [], currentSource, data.data_freshness || '');
+                    renderResults(data);
                 })
                 .catch(err => {
                     btn.disabled = false;
@@ -689,7 +682,9 @@
         }
 
         // ── Render ─────────────────────────────────────────────────────────────
-        function renderResults(permits, source, dataFreshness) {
+        function renderResults(data) {
+            const permits = data.permits || [];
+            const source = data.source || currentSource;
             const area = document.getElementById('resultsArea');
             const meta = document.getElementById('resultsMeta');
             const count = document.getElementById('resultsCount');
@@ -703,22 +698,23 @@
             count.textContent =
                 permits.length + ' opportunit' + (permits.length === 1 ? 'y' : 'ies');
             meta.style.display = 'flex';
-            
-            // Update freshness text if available
-            const freshnessNote = dataFreshness
-                ? `Most recent filing: ${dataFreshness} · Permit filings typically appear within 1–2 weeks of submission · Source: LADBS via data.lacity.org`
-                : 'Source: LADBS via data.lacity.org';
-            const cacheNoteEl = meta.querySelector('.cache-note');
-            if (cacheNoteEl) {
-                cacheNoteEl.innerHTML = 'Sorted by estimated art budget · Data cached 1 hr · ' + freshnessNote;
-            }
+
+            // Dynamic source label from response or city config
+            const cityKey = data.city || currentCity;
+            const cfg = CITY_CONFIG[cityKey] || CITY_CONFIG.los_angeles;
+            const sourceLabel = data.source_label || cfg.sourceLabel;
+            const freshness = data.data_freshness
+                ? 'Most recent filing: ' + data.data_freshness + ' · Permit filings typically appear within 1\u20132 weeks of submission · Source: ' + sourceLabel
+                : 'Source: ' + sourceLabel;
+            document.getElementById('cacheNote').textContent =
+                'Sorted by estimated art budget · Data cached 1 hr · ' + freshness;
 
             const dateKey = source === 'submitted' ? 'filing_date' : 'approval_date';
 
             const rows = permits.map(p => {
                 const desc          = p.project_description || '';
                 const descClean     = cleanDesc(desc);
-                const descTrunc     = descClean.length > 110 ? descClean.slice(0, 110) + '…' : descClean;
+                const descTrunc     = descClean.length > 110 ? descClean.slice(0, 110) + '\u2026' : descClean;
                 const neighborhood  = p.neighborhood || '';
                 const stageBadge    = stageBadgeHtml(p.opportunity_stage || '');
                 const whyHtml       = whyItScoredHtml(p.relevance_reasons || []);
@@ -737,7 +733,7 @@
                     <td class="td-value">${escHtml(p.valuation_display || '')}</td>
                     <td class="td-date">${escHtml(dateStr)}</td>
                     <td>
-                        <a class="btn-deep-dive" href="/" target="_blank" rel="noopener" title="Open Lead Finder">Deep Dive →</a>
+                        <a class="btn-deep-dive" href="/" target="_blank" rel="noopener" title="Open Lead Finder">Deep Dive \u2192</a>
                     </td>
                 </tr>`;
             }).join('');
@@ -762,10 +758,10 @@
         }
 
         function budgetCellHtml(p) {
-            if (!p.art_budget_display) return '<span style="color:var(--gray-text);font-size:12px;">Estimating…</span>';
+            if (!p.art_budget_display) return '<span style="color:var(--gray-text);font-size:12px;">Estimating\u2026</span>';
             const basis = p.ordinance_triggered
                 ? (p.budget_basis || '').replace(/per .+$/, '').trim()
-                : 'Est. 0.5–1.5% of project value';
+                : 'Est. 0.5\u20131.5% of project value';
             return `<div class="budget-amount">${escHtml(p.art_budget_display)}</div>
                     <div class="budget-basis-note">${escHtml(basis)}</div>`;
         }

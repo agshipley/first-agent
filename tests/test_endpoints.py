@@ -140,7 +140,7 @@ class TestApiPermitsEndpoint:
         }
 
     def test_include_ordinance_false_excludes_dependent_permits(self, client):
-        """include_ordinance=false (default): only non-ordinance-dependent permits shown."""
+        """include_ordinance=false (back-compat): maps to sector=private, no dependent permits."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
@@ -181,17 +181,17 @@ class TestApiPermitsEndpoint:
         assert data["count"] >= 1
 
     def test_include_ordinance_default_is_false(self, client):
-        """Without include_ordinance param, behavior should be same as false."""
+        """Without include_ordinance param, default sector='all' shows everything."""
         rows = [self._mock_hotel_row(), self._mock_generic_commercial_row()]
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
                    return_value=rows):
             resp_default = client.get(
                 "/api/permits?source=submitted&min_valuation=5000000"
             )
-            resp_explicit = client.get(
-                "/api/permits?source=submitted&min_valuation=5000000&include_ordinance=false"
+            resp_all = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&sector=all"
             )
-        assert resp_default.get_json()["count"] == resp_explicit.get_json()["count"]
+        assert resp_default.get_json()["count"] == resp_all.get_json()["count"]
 
     def test_api_permits_empty_response(self, client):
         with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
@@ -208,6 +208,259 @@ class TestApiPermitsEndpoint:
         data = resp.get_json()
         assert data["city"] == "Los Angeles"
         assert data["state"] == "CA"
+
+
+# ── City parameter tests ─────────────────────────────────────────────────────
+
+class TestCityParameter:
+
+    def _la_row(self):
+        return {
+            "permit_nbr": "LA-001",
+            "permit_type": "Bldg-New",
+            "status_desc": "Verifications in Progress",
+            "permit_sub_type": "Commercial",
+            "valuation": "10000000",
+            "work_desc": "New hotel with lobby",
+            "primary_address": "100 Spring St, Los Angeles",
+            "submitted_date": "2026-01-01T00:00:00.000",
+            "issue_date": None,
+        }
+
+    def _nyc_row(self):
+        return {
+            "job_filing_number": "NYC-001",
+            "job_type": "New Building",
+            "filing_status": "LOC Issued",
+            "building_type": "Office",
+            "initial_cost": "15000000",
+            "job_description": "New office building with public art plaza",
+            "house_no": "1",
+            "street_name": "BROADWAY",
+            "borough": "MANHATTAN",
+            "zip": "10004",
+            "owner_s_business_name": "Acme Development LLC",
+            "latitude": "40.70",
+            "longitude": "-74.01",
+            "filing_date": "2026-02-01T00:00:00.000",
+            "approved_date": None,
+        }
+
+    def test_default_city_is_los_angeles(self, client):
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[self._la_row()]):
+            resp = client.get("/api/permits?source=submitted&min_valuation=5000000")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["city"] == "los_angeles"
+        assert "LADBS" in data["source_label"]
+
+    def test_explicit_los_angeles(self, client):
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[self._la_row()]):
+            resp = client.get("/api/permits?city=los_angeles&source=submitted&min_valuation=5000000")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["city"] == "los_angeles"
+
+    def test_new_york_returns_200(self, client):
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[self._nyc_row()]):
+            resp = client.get("/api/permits?city=new_york&source=submitted&min_valuation=5000000")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["city"] == "new_york"
+        assert "NYC DOB" in data["source_label"]
+
+    def test_new_york_permits_have_scoring_fields(self, client):
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[self._nyc_row()]):
+            resp = client.get("/api/permits?city=new_york&source=submitted&min_valuation=5000000")
+        data = resp.get_json()
+        if data["count"] > 0:
+            p = data["permits"][0]
+            assert "relevance" in p
+            assert "ordinance_triggered" in p
+
+    def test_unknown_city_returns_400(self, client):
+        resp = client.get("/api/permits?city=chicago&source=submitted")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+        assert "chicago" in data["error"].lower()
+
+    def test_metadata_default_is_los_angeles(self, client):
+        resp = client.get("/api/permits/metadata")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["city"] == "Los Angeles"
+
+    def test_metadata_new_york(self, client):
+        resp = client.get("/api/permits/metadata?city=new_york")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["city"] == "New York"
+        assert data["state"] == "NY"
+        assert "NYC DOB" in data["source_label"]
+
+    def test_metadata_unknown_city_returns_400(self, client):
+        resp = client.get("/api/permits/metadata?city=boston")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+
+
+# ── Sector filter tests ─────────────────────────────────────────────────────���
+
+class TestSectorFilter:
+
+    def _la_commercial_row(self):
+        return {
+            "permit_nbr": "LA-PRIV-001",
+            "permit_type": "Bldg-New",
+            "status_desc": "Verifications in Progress",
+            "permit_sub_type": "Commercial",
+            "valuation": "10000000",
+            "work_desc": "New hotel with lobby and gallery",
+            "primary_address": "100 Main St",
+            "submitted_date": "2026-01-01T00:00:00.000",
+            "issue_date": None,
+        }
+
+    def test_sector_all_is_default(self, client):
+        """sector=all shows everything High/Medium (same as no sector param)."""
+        rows = [self._la_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp_default = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000"
+            )
+            resp_all = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&sector=all"
+            )
+        assert resp_default.get_json()["count"] == resp_all.get_json()["count"]
+
+    def test_sector_private_excludes_ordinance_dependent(self, client):
+        """sector=private: ordinance-dependent permits excluded."""
+        rows = [self._la_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&sector=private"
+            )
+        data = resp.get_json()
+        for p in data["permits"]:
+            assert p["ordinance_dependent"] is False
+
+    def test_sector_private_strips_triggers_from_reasons(self, client):
+        """sector=private: 'Triggers ...' reasons stripped."""
+        rows = [self._la_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&sector=private"
+            )
+        data = resp.get_json()
+        for p in data["permits"]:
+            for reason in p.get("relevance_reasons", []):
+                assert not reason.startswith("Triggers ")
+
+    def test_sector_public_returns_200(self, client):
+        """sector=public: returns 200 even if no public-sector permits match."""
+        rows = [self._la_commercial_row()]
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=rows):
+            resp = client.get(
+                "/api/permits?source=submitted&min_valuation=5000000&sector=public"
+            )
+        assert resp.status_code == 200
+        # LA rows have no owner data, so public sector filter returns 0
+        assert resp.get_json()["count"] == 0
+
+
+# ── Error isolation tests ────────────────────────────────────────────────────
+
+class TestErrorIsolation:
+
+    def _la_row(self):
+        return {
+            "permit_nbr": "LA-001",
+            "permit_type": "Bldg-New",
+            "status_desc": "Verifications in Progress",
+            "permit_sub_type": "Commercial",
+            "valuation": "10000000",
+            "work_desc": "New hotel with lobby",
+            "primary_address": "100 Spring St",
+            "submitted_date": "2026-01-01T00:00:00.000",
+            "issue_date": None,
+        }
+
+    def test_nyc_failure_does_not_break_la(self, client):
+        """When NYC connector raises, LA should still work."""
+        # First verify NYC fails gracefully
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   side_effect=RuntimeError("Socrata NYC is down")):
+            resp_nyc = client.get(
+                "/api/permits?city=new_york&source=submitted&min_valuation=5000000"
+            )
+        assert resp_nyc.status_code == 502
+        data_nyc = resp_nyc.get_json()
+        assert "error" in data_nyc
+
+        # Then verify LA still works
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[self._la_row()]):
+            resp_la = client.get(
+                "/api/permits?city=los_angeles&source=submitted&min_valuation=5000000"
+            )
+        assert resp_la.status_code == 200
+        assert resp_la.get_json()["count"] >= 0
+
+    def test_la_failure_does_not_break_nyc(self, client):
+        """When LA connector raises, NYC should still work."""
+        nyc_row = {
+            "job_filing_number": "NYC-001",
+            "job_type": "New Building",
+            "filing_status": "LOC Issued",
+            "building_type": "Office",
+            "initial_cost": "15000000",
+            "job_description": "New office building",
+            "house_no": "1",
+            "street_name": "BROADWAY",
+            "borough": "MANHATTAN",
+            "zip": "10004",
+            "latitude": "40.70",
+            "longitude": "-74.01",
+            "filing_date": "2026-02-01T00:00:00.000",
+        }
+
+        # First verify LA fails gracefully
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   side_effect=RuntimeError("Socrata LA is down")):
+            resp_la = client.get(
+                "/api/permits?city=los_angeles&source=submitted&min_valuation=5000000"
+            )
+        assert resp_la.status_code == 502
+
+        # Then verify NYC still works
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[nyc_row]):
+            resp_nyc = client.get(
+                "/api/permits?city=new_york&source=submitted&min_valuation=5000000"
+            )
+        assert resp_nyc.status_code == 200
+
+    def test_connector_error_returns_user_friendly_message(self, client):
+        """RuntimeError from connector should return 502 with error message."""
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   side_effect=RuntimeError("Connection timed out")):
+            resp = client.get(
+                "/api/permits?city=los_angeles&source=submitted&min_valuation=5000000"
+            )
+        assert resp.status_code == 502
+        data = resp.get_json()
+        assert "error" in data
+        assert "timed out" in data["error"].lower()
 
 
 # ── /reports endpoints ────────────────────────────────────────────────────────

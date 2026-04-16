@@ -14,9 +14,27 @@ from flask import Blueprint, request, jsonify, render_template
 
 from permits.connectors.base import ConnectorFilters
 from permits.connectors.cities.los_angeles import la_connector
-from permits.engine import score_permits, RelevanceLevel
+from permits.connectors.cities.new_york import nyc_connector
+from permits.engine import score_permits, RelevanceLevel, _matches_public_sector_owner
 
 permits_bp = Blueprint("permits", __name__)
+
+# ── City connector registry ──────────────────────────────────────────────────
+
+_CONNECTORS = {
+    "los_angeles": la_connector,
+    "new_york": nyc_connector,
+}
+
+_SOURCE_LABELS = {
+    "los_angeles": "LADBS via data.lacity.org",
+    "new_york": "NYC DOB via data.cityofnewyork.us",
+}
+
+
+def _get_connector(city_key: str):
+    """Return the connector for a city key, or None if unknown."""
+    return _CONNECTORS.get(city_key)
 
 
 def _budget_sort_key(sp) -> float:
@@ -33,6 +51,14 @@ def _budget_sort_key(sp) -> float:
     return 0.0
 
 
+def _is_public_sector(sp) -> bool:
+    """Check if a scored permit is a public-sector project."""
+    patterns = sp.permit.raw_data.get("public_sector_owner_patterns", [])
+    if patterns and _matches_public_sector_owner(sp.permit, patterns):
+        return True
+    return False
+
+
 @permits_bp.route("/permits-monitor")
 def permits_monitor():
     return render_template("permits.html")
@@ -40,6 +66,11 @@ def permits_monitor():
 
 @permits_bp.route("/api/permits")
 def api_permits():
+    city_key = request.args.get("city", "los_angeles")
+    connector = _get_connector(city_key)
+    if connector is None:
+        return jsonify({"error": f"Unknown city: {city_key}"}), 400
+
     try:
         filters = ConnectorFilters(
             min_valuation=float(request.args.get("min_valuation", 5_000_000)),
@@ -51,9 +82,16 @@ def api_permits():
             source=request.args.get("source", "submitted"),
         )
         art_budget_min = float(request.args.get("art_budget_min", 0))
-        include_ordinance = request.args.get("include_ordinance", "false").lower() == "true"
+        sector = request.args.get("sector", "all")
 
-        permits = la_connector.fetch(filters)
+        # Back-compat: old include_ordinance param maps to sector logic
+        include_ordinance_raw = request.args.get("include_ordinance")
+        if include_ordinance_raw is not None and sector == "all":
+            # Legacy callers: include_ordinance=true → all, false → private
+            if include_ordinance_raw.lower() != "true":
+                sector = "private"
+
+        permits = connector.fetch(filters)
 
         # Post-filter: exact valuation threshold (server-side pre-filter is
         # approximate because the valuation field is stored as text)
@@ -78,12 +116,20 @@ def api_permits():
                 if _budget_sort_key(sp) >= art_budget_min
             ]
 
-        # Ordinance toggle (default OFF):
-        #   OFF → exclude permits where ordinance is load-bearing for H/M status.
-        #         Shows only what the engine finds on pure project characteristics.
-        #   ON  → include everything (including PADFP-dependent permits).
-        if not include_ordinance:
-            opportunities = [sp for sp in opportunities if not sp.ordinance_dependent]
+        # Sector filter:
+        #   "all"     → everything High/Medium (default)
+        #   "public"  → public-sector projects with ordinance-triggered art spending
+        #   "private" → non-public-sector projects (ordinance-dependent excluded)
+        if sector == "public":
+            opportunities = [
+                sp for sp in opportunities
+                if sp.ordinance_triggered and _is_public_sector(sp)
+            ]
+        elif sector == "private":
+            opportunities = [
+                sp for sp in opportunities
+                if not _is_public_sector(sp) and not sp.ordinance_dependent
+            ]
 
         # Sort by estimated art budget descending (biggest opportunities first),
         # then by filing date descending (most recent within the same budget tier).
@@ -95,12 +141,12 @@ def api_permits():
             reverse=True,
         )
 
-        # Serialize. When PADFP is toggled OFF, strip the ordinance trigger line
-        # from reasons — it's noise in a view the user explicitly filtered away.
+        # Serialize. When viewing private sector, strip the ordinance trigger
+        # line from reasons — it's noise in that view.
         permit_dicts = []
         for sp in opportunities:
             d = sp.to_dict()
-            if not include_ordinance:
+            if sector == "private":
                 d["relevance_reasons"] = [
                     r for r in d["relevance_reasons"]
                     if not r.startswith("Triggers ")
@@ -124,6 +170,8 @@ def api_permits():
             "source": filters.source,
             "status_category": filters.status_category,
             "data_freshness": freshness_text,
+            "city": city_key,
+            "source_label": _SOURCE_LABELS.get(city_key, ""),
         })
 
     except RuntimeError as exc:
@@ -134,14 +182,20 @@ def api_permits():
 
 @permits_bp.route("/api/permits/metadata")
 def api_permits_metadata():
+    city_key = request.args.get("city", "los_angeles")
+    connector = _get_connector(city_key)
+    if connector is None:
+        return jsonify({"error": f"Unknown city: {city_key}"}), 400
+
     try:
-        meta = la_connector.get_metadata()
+        meta = connector.get_metadata()
         return jsonify({
             "city": meta.city,
             "state": meta.state,
             "datasets": meta.datasets,
             "data_freshness": meta.data_freshness,
             "known_limitations": meta.known_limitations,
+            "source_label": _SOURCE_LABELS.get(city_key, ""),
         })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
