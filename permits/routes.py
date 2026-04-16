@@ -64,6 +64,9 @@ def permits_monitor():
     return render_template("permits.html")
 
 
+_VALID_SECTORS = {"all", "public", "private"}
+
+
 @permits_bp.route("/api/permits")
 def api_permits():
     city_key = request.args.get("city", "los_angeles")
@@ -72,17 +75,32 @@ def api_permits():
         return jsonify({"error": f"Unknown city: {city_key}"}), 400
 
     try:
+        min_valuation = float(request.args.get("min_valuation", 5_000_000))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid min_valuation: must be a number"}), 400
+    try:
+        limit = min(int(request.args.get("limit", 50)), 200)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid limit: must be an integer"}), 400
+    try:
+        art_budget_min = float(request.args.get("art_budget_min", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid art_budget_min: must be a number"}), 400
+
+    sector = request.args.get("sector", "all")
+    if sector not in _VALID_SECTORS:
+        return jsonify({"error": f"Invalid sector: must be all, public, or private"}), 400
+
+    try:
         filters = ConnectorFilters(
-            min_valuation=float(request.args.get("min_valuation", 5_000_000)),
+            min_valuation=min_valuation,
             permit_type=request.args.get("permit_type", "all"),
             occupancy_type=request.args.get("occupancy_type", "all"),
             status_category=request.args.get("status_category", "pipeline"),
             date_from=request.args.get("date_from", ""),
-            limit=min(int(request.args.get("limit", 50)), 200),
+            limit=limit,
             source=request.args.get("source", "submitted"),
         )
-        art_budget_min = float(request.args.get("art_budget_min", 0))
-        sector = request.args.get("sector", "all")
 
         # Back-compat: old include_ordinance param maps to sector logic
         include_ordinance_raw = request.args.get("include_ordinance")

@@ -61,6 +61,12 @@ class TestNYCConfiguration:
         assert "DDC" in NYC_CONFIG.public_sector_owner_patterns
         assert "DOE" in NYC_CONFIG.public_sector_owner_patterns
 
+    def test_truncated_agency_names_in_patterns(self):
+        """Patterns should match truncated agency names from real DOB data."""
+        patterns = NYC_CONFIG.public_sector_owner_patterns
+        assert "Department of Design" in patterns, "Missing partial match for DDC"
+        assert "Economic Development" in patterns, "Missing match for NYC EDC"
+
     def test_field_map_has_owner_and_applicant_fields(self):
         required = {"permit_id", "project_description", "address", "owner_name", "applicant_name"}
         for key in required:
@@ -382,6 +388,29 @@ class TestWhereClause:
         )
         where = connector._build_where(dataset, filters)
         assert "2025-01-01" in where
+
+    def test_date_from_rejects_malformed_input(self):
+        """Malformed date_from should be silently ignored, not injected into query."""
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        for bad_date in ["2024-01-01' OR 1=1 OR '", "not-a-date", "2024/01/01", "01-2024-01"]:
+            filters = ConnectorFilters(
+                min_valuation=0, permit_type="all", occupancy_type="all",
+                status_category="pipeline", date_from=bad_date, limit=50, source="submitted",
+            )
+            where = connector._build_where(dataset, filters)
+            assert bad_date not in where, f"Malformed date_from '{bad_date}' was injected into query"
+
+    def test_date_from_accepts_valid_iso_date(self):
+        """Valid ISO dates should still be included in the where clause."""
+        connector = self._connector()
+        dataset = LA_CONFIG.datasets["submitted"]
+        filters = ConnectorFilters(
+            min_valuation=0, permit_type="all", occupancy_type="all",
+            status_category="pipeline", date_from="2026-03-15", limit=50, source="submitted",
+        )
+        where = connector._build_where(dataset, filters)
+        assert "2026-03-15" in where
 
 
 class TestFetchRawAndNormalization:

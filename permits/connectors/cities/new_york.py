@@ -31,6 +31,8 @@ NYC_PUBLIC_SECTOR_OWNER_PATTERNS = [
     "Health + Hospitals",
     "NYC Health + Hospitals",
     "HHC",
+    "Department of Design",
+    "Economic Development",
 ]
 
 NYC_CONFIG = SocrataConfig(

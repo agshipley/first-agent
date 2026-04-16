@@ -11,6 +11,7 @@ and apply the exact numeric threshold in Python post-fetch. This is a known
 quirk of the LADBS dataset format — other cities may not need this workaround.
 """
 
+import re
 import time
 import httpx
 from dataclasses import dataclass, field
@@ -299,7 +300,7 @@ class SocrataConnector(BaseConnector):
                 clauses.append(f"{status_field} in({vals})")
 
         # Date filter — applied to the dataset's primary sort field
-        if filters.date_from:
+        if filters.date_from and re.match(r"^\d{4}-\d{2}-\d{2}$", filters.date_from):
             clauses.append(
                 f"{dataset.primary_sort_field}>='{filters.date_from}T00:00:00.000'"
             )

@@ -4,8 +4,8 @@
 
 **Project home:** `first-agent/permits/`
 **Parent repo:** `github.com/agshipley/first-agent` (private)
-**Status:** Architecture defined, LA connector in development
-**Last updated:** April 12, 2026
+**Status:** LA and NYC connectors live, city selector and sector filter implemented
+**Last updated:** April 15, 2026
 
 ---
 
@@ -118,7 +118,7 @@ first-agent/
 │   │   └── cities/
 │   │       ├── __init__.py
 │   │       ├── los_angeles.py      # LA-specific dataset IDs, field mappings
-│   │       ├── new_york.py         # NYC config (future)
+│   │       ├── new_york.py         # NYC DOB NOW Build config (live)
 │   │       ├── chicago.py          # Chicago config (future)
 │   │       └── ...
 │   ├── ordinances/
@@ -213,8 +213,8 @@ This data is maintained as a JSON file and updated manually. Ordinances change i
 
 | City | Open data portal | Platform | Percent-for-art | Priority | Status |
 |---|---|---|---|---|---|
-| Los Angeles | data.lacity.org | Socrata | Yes (PADFP) | 1 | Connector in development |
-| New York | data.cityofnewyork.us | Socrata | Yes (NYCDCC) | 2 | Not started |
+| Los Angeles | data.lacity.org | Socrata | Yes (PADFP) | 1 | Live — connector, ordinance, engine implemented |
+| New York | data.cityofnewyork.us | Socrata | Yes (NYCDCC) | 2 | Live — connector, ordinance, sector filter implemented |
 | San Francisco | datasf.org | Socrata | Yes | 3 | Not started |
 | Chicago | data.cityofchicago.org | Socrata | Yes | 4 | Not started |
 | Seattle | data.seattle.gov | Socrata | Yes | 5 | Not started |
@@ -420,21 +420,32 @@ The `valuation` field is stored as **text** in both datasets. Rules:
 - [x] Valuation text-type limitation documented with workaround
 - [x] Lat/lon limitation in submitted dataset documented
 - [x] LA permits tab — basic implementation shipped (flat `permits.py` in root, needs refactor)
+- [x] Refactor current LA permits code into the `permits/` directory structure
+- [x] Build `permits/schema.py` — `CanonicalPermit` dataclass
+- [x] Build `permits/connectors/base.py` — abstract connector interface
+- [x] Build `permits/connectors/socrata.py` — generic Socrata fetching logic
+- [x] Build `permits/connectors/cities/los_angeles.py` — LA config (dataset IDs, field mappings)
+- [x] Build `permits/routes.py` — Flask blueprint
+- [x] Update `app.py` to import blueprint from `permits/routes.py`
+- [x] Add `gwh9-jnip` (submitted permits) to the UI
+- [x] Build the intelligence engine — percent-for-art matching for LA (PADFP ordinance)
+- [x] Populate `permits/ordinances/data/percent_for_art.json` with LA PADFP ordinance data
+- [x] NYC DOB NOW Build connector (two datasets: submitted filings, approved permits)
+- [x] NYC percent-for-art ordinance data (Public Art Allocation for Public Capital Projects)
+- [x] City selector in routes and UI (los_angeles, new_york)
+- [x] Project sector filter (all/public/private) replacing PADFP toggle
+- [x] Public-sector owner pattern matching for NYC ordinance eligibility
+- [x] Dynamic UI labels (city name, data source, freshness) per selected city
 
 ### In progress
-- [ ] Refactor current LA permits code into the `permits/` directory structure
+
+*(Nothing currently in progress.)*
 
 ### Next
-- [ ] Build `permits/schema.py` — `CanonicalPermit` dataclass
-- [ ] Build `permits/connectors/base.py` — abstract connector interface
-- [ ] Build `permits/connectors/socrata.py` — generic Socrata fetching logic
-- [ ] Build `permits/connectors/cities/los_angeles.py` — LA config (dataset IDs, field mappings per this spec)
-- [ ] Build `permits/routes.py` — Flask blueprint (move from `permits.py` root file)
-- [ ] Update `app.py` to import blueprint from `permits/routes.py`
-- [ ] Add `gwh9-jnip` (submitted permits) to the UI — expose as filter option or merge with issued
-- [ ] Build the intelligence engine — percent-for-art matching for LA (PADFP ordinance)
-- [ ] Populate `permits/ordinances/data/percent_for_art.json` with LA PADFP ordinance data
-- [ ] Confirm Socrata availability for NYC, Chicago, SF, Seattle
+- [ ] Confirm Socrata availability for SF, Chicago, Seattle
+- [ ] Add connector configs for next 2–3 cities
+- [ ] Input validation hardening (date_from, numeric params)
+- [ ] Update PERMITS_PROJECT.md expansion table as cities are confirmed
 
 ### Deferred
 - [ ] Non-Socrata city connectors

@@ -378,6 +378,43 @@ class TestSectorFilter:
         assert resp.get_json()["count"] == 0
 
 
+# ── Input validation tests ───────────────────────────────────────────────────
+
+class TestInputValidation:
+
+    def test_non_numeric_min_valuation_returns_400(self, client):
+        resp = client.get("/api/permits?min_valuation=abc")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "min_valuation" in data["error"].lower()
+
+    def test_non_numeric_limit_returns_400(self, client):
+        resp = client.get("/api/permits?limit=xyz")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "limit" in data["error"].lower()
+
+    def test_non_numeric_art_budget_min_returns_400(self, client):
+        resp = client.get("/api/permits?art_budget_min=nope")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "art_budget_min" in data["error"].lower()
+
+    def test_invalid_sector_returns_400(self, client):
+        resp = client.get("/api/permits?sector=invalid")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "sector" in data["error"].lower()
+
+    def test_valid_sector_values_accepted(self, client):
+        """all, public, private should all be accepted without 400."""
+        with patch("permits.connectors.socrata.SocrataConnector._fetch_raw",
+                   return_value=[]):
+            for sector in ["all", "public", "private"]:
+                resp = client.get(f"/api/permits?sector={sector}&min_valuation=5000000")
+                assert resp.status_code == 200, f"sector={sector} returned {resp.status_code}"
+
+
 # ── Error isolation tests ────────────────────────────────────────────────────
 
 class TestErrorIsolation:
