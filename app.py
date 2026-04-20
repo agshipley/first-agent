@@ -1,5 +1,4 @@
 import anthropic
-import queue
 import threading
 import time
 import uuid
@@ -7,7 +6,7 @@ import json
 import os
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from prompts import get_system_prompt, get_la_permitting_system_prompt, get_la_trade_press_system_prompt
+from prompts import get_system_prompt
 from tools import (
     save_leads_to_spreadsheet,
     get_existing_leads_for_segment,
@@ -25,10 +24,6 @@ app.register_blueprint(permits_bp)
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
-
-# Minimum leads from the municipal-source search before the trade press
-# fallback is triggered for the enhanced LA early-stage path.
-LA_FALLBACK_THRESHOLD = 3
 
 # ── Lead search tools ─────────────────────────────────────────────────────────
 
@@ -332,151 +327,27 @@ def run():
         existing_names = existing if existing else None
         system_prompt = get_system_prompt(segment, existing_names)
 
-        is_la_enhanced = (
-            geography == "Greater Los Angeles Area"
-            and project_stage == "Early Stage (Pre-Construction)"
-        )
+        yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
 
-        if is_la_enhanced:
-            # ── Enhanced path: both phases run in parallel ─────────────────────
-            # Running sequentially took ~120s and hit gunicorn's worker timeout.
-            # Parallel execution cuts wall-clock time to max(phase1, phase2) ≈ 60s.
-            yield "data: Starting enhanced LA early-stage search...\n\n"
-            yield "data: Running general search and LA permitting search in parallel...\n\n"
+        gen = _collect_leads(client, system_prompt, TOOLS, user_message)
+        try:
+            while True:
+                msg = next(gen)
+                yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
+        except StopIteration as exc:
+            leads = exc.value or []
 
-            la_system_prompt = get_la_permitting_system_prompt(existing_names)
-            la_user_message = (
-                "Search these specific Los Angeles municipal sources for early-stage development "
-                "projects that are strong candidates for art commissioning by Tre Borden /Co. "
-                "Focus on private developments with permit valuations above $5M and public capital "
-                "projects with percent-for-art requirements. Use all 5 searches on municipal sources."
-            )
+        for lead in leads:
+            lead.setdefault("lead_source", "Web Search")
 
-            status_q = queue.Queue()
-            phase1_result = [None]
-            phase2_result = [None]
-
-            def _run_phase(gen, result_holder):
-                try:
-                    while True:
-                        status_q.put(next(gen))
-                except StopIteration as exc:
-                    result_holder[0] = exc.value or []
-                status_q.put(None)  # signal this phase is done
-
-            t1 = threading.Thread(
-                target=_run_phase,
-                args=(_collect_leads(client, system_prompt, TOOLS, user_message), phase1_result),
-                daemon=True
-            )
-            t2 = threading.Thread(
-                target=_run_phase,
-                args=(_collect_leads(client, la_system_prompt, TOOLS, la_user_message), phase2_result),
-                daemon=True
-            )
-            t1.start()
-            t2.start()
-
-            done_count = 0
-            while done_count < 2:
-                try:
-                    msg = status_q.get(timeout=15)
-                    if msg is None:
-                        done_count += 1
-                    elif msg.startswith(":"):
-                        yield f"{msg}\n\n"
-                    else:
-                        yield f"data: {msg}\n\n"
-                except queue.Empty:
-                    yield ": keepalive\n\n"  # both phases quiet — keep proxy alive
-
-            t1.join()
-            t2.join()
-
-            main_leads = phase1_result[0] or []
-            la_leads   = phase2_result[0] or []
-
-            # ── Programmatic fallback: if municipal search underperformed, run
-            # a separate trade press search rather than relying on Claude to
-            # decide when to switch strategies.
-            if len(la_leads) < LA_FALLBACK_THRESHOLD:
-                print(
-                    f"[LA fallback] Municipal search returned {len(la_leads)} leads "
-                    f"(threshold {LA_FALLBACK_THRESHOLD}) — triggering trade press fallback"
-                )
-                yield "data: LA municipal search returned few results — running trade press fallback...\n\n"
-
-                fallback_exclusions = list(existing_names or []) + [
-                    l.get("company_name", "") for l in la_leads
-                ]
-                fallback_prompt = get_la_trade_press_system_prompt(
-                    fallback_exclusions if fallback_exclusions else None
-                )
-                fallback_user_message = (
-                    "Search LA real estate trade press and developer announcements for "
-                    "early-stage development projects in Greater Los Angeles Area that are "
-                    "strong candidates for art commissioning by Tre Borden /Co."
-                )
-
-                gen = _collect_leads(client, fallback_prompt, TOOLS, fallback_user_message)
-                trade_press_leads = []
-                try:
-                    while True:
-                        msg = next(gen)
-                        yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
-                except StopIteration as exc:
-                    trade_press_leads = exc.value or []
-
-                la_names = {l.get("company_name", "").strip().lower() for l in la_leads}
-                for lead in trade_press_leads:
-                    name = lead.get("company_name", "").strip().lower()
-                    if name and name not in la_names:
-                        la_leads.append(lead)
-                        la_names.add(name)
-
-            for lead in main_leads:
-                lead.setdefault("lead_source", "Web Search")
-
-            # Merge: main leads first, then LA leads not already present
-            main_names = {l.get("company_name", "").strip().lower() for l in main_leads}
-            for lead in la_leads:
-                name = lead.get("company_name", "").strip().lower()
-                if name and name not in main_names:
-                    main_leads.append(lead)
-                    main_names.add(name)
-
-            yield "data: Saving leads to spreadsheet...\n\n"
-            try:
-                result, actually_saved = save_leads_to_spreadsheet(main_leads, segment)
-                yield f"data: DONE|{json.dumps(actually_saved)}\n\n"
-            except Exception as e:
-                yield f"data: Error saving leads: {e}\n\n"
-                yield "data: DONE|[]\n\n"
-            return
-
-        else:
-            # ── Standard path ─────────────────────────────────────────────────
-            yield f"data: Starting {segment.replace('_', ' ')} lead search...\n\n"
-
-            gen = _collect_leads(client, system_prompt, TOOLS, user_message)
-            try:
-                while True:
-                    msg = next(gen)
-                    yield f"{msg}\n\n" if msg.startswith(":") else f"data: {msg}\n\n"
-            except StopIteration as exc:
-                leads = exc.value or []
-
-            for lead in leads:
-                lead.setdefault("lead_source", "Web Search")
-
-            yield "data: Saving leads to spreadsheet...\n\n"
-            try:
-                result, actually_saved = save_leads_to_spreadsheet(leads, segment)
-                yield f"data: DONE|{json.dumps(actually_saved)}\n\n"
-            except Exception as e:
-                yield f"data: Error saving leads: {e}\n\n"
-                yield "data: DONE|[]\n\n"
-            return
+        yield "data: Saving leads to spreadsheet...\n\n"
+        try:
+            result, actually_saved = save_leads_to_spreadsheet(leads, segment)
+            yield f"data: DONE|{json.dumps(actually_saved)}\n\n"
+        except Exception as e:
+            yield f"data: Error saving leads: {e}\n\n"
+            yield "data: DONE|[]\n\n"
+        return
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 

@@ -370,20 +370,6 @@
             border-color: currentColor;
         }
 
-        /* ── Enhanced search badge ── */
-        .enhanced-badge {
-            display: none;
-            font-size: 12px;
-            color: var(--gray-text);
-            font-style: italic;
-            align-self: center;
-            padding-left: 4px;
-        }
-
-        .enhanced-badge.visible {
-            display: inline;
-        }
-
         /* ── Download ── */
         .download-btn {
             display: inline-block;
@@ -460,7 +446,7 @@
         <div class="controls">
             <button class="segment-btn active" data-segment="corporate" onclick="selectSegment(this)">Corporate</button>
             <button class="segment-btn" data-segment="public_sector" onclick="selectSegment(this)">Public Sector</button>
-            <select class="geo-select" id="geoSelect" onchange="updateEnhancedBadge()">
+            <select class="geo-select" id="geoSelect">
                 <option value="Greater Los Angeles Area" selected>Greater Los Angeles Area</option>
                 <option value="San Francisco">San Francisco</option>
                 <option value="Portland">Portland</option>
@@ -481,13 +467,12 @@
                 <option value="$500K–$1M">$500K–$1M</option>
                 <option value="$1M+">$1M+</option>
             </select>
-            <select class="geo-select" id="stageSelect" onchange="updateEnhancedBadge()">
+            <select class="geo-select" id="stageSelect">
                 <option value="All Stages" selected>All Stages</option>
                 <option value="Early Stage (Pre-Construction)">Early Stage (Pre-Construction)</option>
                 <option value="Active Construction">Active Construction</option>
             </select>
             <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
-            <span class="enhanced-badge" id="enhancedBadge">+ Includes LA permitting data</span>
         </div>
 
         <div id="deepDiveBanner" style="display:none; padding: 16px 20px; background: var(--gray-bg); border-left: 3px solid var(--pink-dark); border-radius: 0 4px 4px 0; margin-bottom: 24px;">
@@ -527,14 +512,6 @@
         const MAX_RETRIES = 2;
         let _leadCacheId = 0;
         const _leadCache = {};
-
-        function updateEnhancedBadge() {
-            const geo = document.getElementById("geoSelect").value;
-            const stage = document.getElementById("stageSelect").value;
-            const badge = document.getElementById("enhancedBadge");
-            const isEnhanced = geo === "Greater Los Angeles Area" && stage === "Early Stage (Pre-Construction)";
-            badge.classList.toggle("visible", isEnhanced);
-        }
 
         function selectSegment(btn) {
             document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
