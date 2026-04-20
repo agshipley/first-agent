@@ -370,6 +370,74 @@
             border-color: currentColor;
         }
 
+        /* ── Info tooltips ── */
+        .info-tip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-left: 4px;
+            cursor: help;
+            vertical-align: middle;
+        }
+
+        .info-tip-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: 1.5px solid var(--gray-light);
+            font-size: 10px;
+            font-weight: 700;
+            font-style: normal;
+            color: var(--gray-text);
+            line-height: 1;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .info-tip:hover .info-tip-icon,
+        .info-tip:focus-within .info-tip-icon {
+            border-color: var(--pink-dark);
+            color: var(--black);
+        }
+
+        .info-tip-body {
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: calc(100% + 8px);
+            transform: translateX(-50%);
+            width: 280px;
+            padding: 12px 14px;
+            background: var(--cream);
+            color: var(--black);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 12px;
+            font-weight: 400;
+            line-height: 1.6;
+            border: 1px solid var(--gray-light);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .info-tip.active .info-tip-body,
+        .info-tip:hover .info-tip-body,
+        .info-tip:focus-within .info-tip-body {
+            display: block;
+        }
+
+        @media (max-width: 640px) {
+            .info-tip-body {
+                left: auto;
+                right: -8px;
+                transform: none;
+                width: 240px;
+            }
+        }
+
         /* ── Download ── */
         .download-btn {
             display: inline-block;
@@ -446,6 +514,7 @@
         <div class="controls">
             <button class="segment-btn active" data-segment="corporate" onclick="selectSegment(this)">Corporate</button>
             <button class="segment-btn" data-segment="public_sector" onclick="selectSegment(this)">Public Sector</button>
+            <span class="info-tip" tabindex="0" role="button" aria-label="Segment info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">Corporate: developers, architecture firms, and corporate clients commissioning art for private spaces. Public Sector: municipal agencies, transit authorities, and universities with percent-for-art requirements or public art programs.</span></span>
             <select class="geo-select" id="geoSelect">
                 <option value="Greater Los Angeles Area" selected>Greater Los Angeles Area</option>
                 <option value="San Francisco">San Francisco</option>
@@ -467,11 +536,13 @@
                 <option value="$500K–$1M">$500K–$1M</option>
                 <option value="$1M+">$1M+</option>
             </select>
+            <span class="info-tip" tabindex="0" role="button" aria-label="Budget info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">Filters results by estimated project budget. Smaller budgets typically mean smaller art commissions; larger budgets indicate higher-potential leads. &ldquo;Any&rdquo; returns all budget ranges.</span></span>
             <select class="geo-select" id="stageSelect">
                 <option value="All Stages" selected>All Stages</option>
                 <option value="Early Stage (Pre-Construction)">Early Stage (Pre-Construction)</option>
                 <option value="Active Construction">Active Construction</option>
             </select>
+            <span class="info-tip" tabindex="0" role="button" aria-label="Stage info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">Early Stage (Pre-Construction): projects not yet breaking ground. Best for establishing relationships before developers lock in finishes and budgets. Active Construction: projects underway where art commissioning may still be open. Shorter runway but higher certainty the project will happen.</span></span>
             <button class="run-btn" id="runBtn" onclick="runAgent()">Find Leads</button>
         </div>
 
@@ -508,6 +579,18 @@
     </main>
 
     <script>
+        // ── Tooltip interaction (mobile tap support) ─────────────────────────
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.info-tip.active').forEach(function(tip) {
+                if (!tip.contains(e.target)) tip.classList.remove('active');
+            });
+            var icon = e.target.closest('.info-tip');
+            if (icon) {
+                e.stopPropagation();
+                icon.classList.toggle('active');
+            }
+        });
+
         let selectedSegment = "corporate";
         const MAX_RETRIES = 2;
         let _leadCacheId = 0;
@@ -540,14 +623,14 @@
                 <div class="${cardClass}">
                     <div class="lead-name">
                         ${lead.company_name}
-                        <span class="badge badge-icp ${icpClass}" title="Ideal Customer Profile score (1\u201310) based on fit with Tre Borden /Co\u2019s art commissioning services">ICP ${score}</span>
+                        <span class="badge badge-icp ${icpClass}">ICP ${score} <span class="info-tip" tabindex="0" role="button" aria-label="ICP info" style="margin-left:2px;"><span class="info-tip-icon" aria-hidden="true" style="width:13px;height:13px;font-size:9px;">i</span><span class="info-tip-body" role="tooltip">Ideal Customer Profile score (1&ndash;10) based on fit with Tre Borden /Co&rsquo;s art commissioning services. Higher scores indicate stronger fit: active project, appropriate budget, decision-maker accessible.</span></span></span>
                         ${newBadge}
                     </div>
                     <div class="lead-meta">${lead.type} — ${lead.location}${dateLine}</div>
                     <div class="lead-why">${lead.why_a_lead}</div>
                     <div class="lead-actions">
                         <button class="deep-dive-btn" onclick="startDeepDive('${key}')">Deep Dive →</button>
-                        <span class="deep-dive-note">Runs an additional AI search</span>
+                        <span class="info-tip" tabindex="0" role="button" aria-label="Deep Dive info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">Runs an additional AI research pass focused on this specific lead, producing a detailed report with project context, key contacts, and outreach recommendations. Takes 60&ndash;90 seconds.</span></span>
                     </div>
                 </div>
             `;

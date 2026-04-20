@@ -449,6 +449,75 @@
 
         #toast.show { opacity: 1; }
 
+        /* ── Info tooltips ── */
+        .info-tip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-left: 4px;
+            cursor: help;
+            vertical-align: middle;
+        }
+
+        .info-tip-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: 1.5px solid var(--gray-light);
+            font-size: 10px;
+            font-weight: 700;
+            font-style: normal;
+            color: var(--gray-text);
+            line-height: 1;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .info-tip:hover .info-tip-icon,
+        .info-tip:focus-within .info-tip-icon {
+            border-color: var(--pink-dark);
+            color: var(--black);
+        }
+
+        .info-tip-body {
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: calc(100% + 8px);
+            transform: translateX(-50%);
+            width: 280px;
+            padding: 12px 14px;
+            background: var(--cream);
+            color: var(--black);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 12px;
+            font-weight: 400;
+            line-height: 1.6;
+            border: 1px solid var(--gray-light);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .info-tip.active .info-tip-body,
+        .info-tip:hover .info-tip-body,
+        .info-tip:focus-within .info-tip-body {
+            display: block;
+        }
+
+        /* Keep tooltips on-screen on small viewports */
+        @media (max-width: 768px) {
+            .info-tip-body {
+                left: auto;
+                right: -8px;
+                transform: none;
+                width: 240px;
+            }
+        }
+
         /* ── Responsive ── */
         @media (max-width: 768px) {
             .site-header { padding: 24px 20px; }
@@ -486,19 +555,25 @@
         </p>
 
         <!-- Source toggle -->
-        <div class="source-toggle">
-            <button class="toggle-btn active" id="btnPipeline" onclick="setSource('submitted')">
-                In Plan Review
-            </button>
-            <button class="toggle-btn" id="btnIssued" onclick="setSource('issued')">
-                Permitted &amp; Active
-            </button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;">
+            <div class="source-toggle" style="margin-bottom:0;">
+                <button class="toggle-btn active" id="btnPipeline" onclick="setSource('submitted')">
+                    In Plan Review
+                </button>
+                <button class="toggle-btn" id="btnIssued" onclick="setSource('issued')">
+                    Permitted &amp; Active
+                </button>
+            </div>
+            <span class="info-tip" tabindex="0" role="button" aria-label="Pipeline stage info">
+                <span class="info-tip-icon" aria-hidden="true">i</span>
+                <span class="info-tip-body" role="tooltip">In plan review: permits filed but not yet approved. Best for establishing relationships early, before developers lock in finishes and budgets. Longest runway. Permitted &amp; active: permits approved or issued. Best for projects breaking ground in the next 6&ndash;18 months. Shortest runway but highest certainty the project will happen.</span>
+            </span>
         </div>
 
         <!-- Filter bar -->
         <div class="filter-bar">
             <div class="filter-group">
-                <span class="filter-label">City</span>
+                <span class="filter-label">City <span class="info-tip" tabindex="0" role="button" aria-label="City info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">Each city has its own permit data source and percent-for-art ordinance. Los Angeles: permits filed with LADBS, PADFP (1%) applies to private commercial and multi-family developments over $500K. New York: permits filed with NYC DOB NOW Build, Percent-for-Art (1%) applies only to city-funded capital projects.</span></span></span>
                 <select id="citySelect" class="filter-select" onchange="setCity(this.value)">
                     <option value="los_angeles">Los Angeles</option>
                     <option value="new_york">New York</option>
@@ -551,7 +626,7 @@
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Project Sector</span>
+                <span class="filter-label">Project Sector <span class="info-tip" tabindex="0" role="button" aria-label="Sector info"><span class="info-tip-icon" aria-hidden="true">i</span><span class="info-tip-body" role="tooltip">All projects: every opportunity scored High or Medium. Public sector (percent-for-art): projects owned by government agencies where art spending is legally mandated &mdash; higher certainty of art budget, slower procurement. Private development: privately-owned projects where art commissioning is voluntary or incentivized by ordinance &mdash; faster decisions, budget depends on developer&rsquo;s priorities.</span></span></span>
                 <select id="sectorFilter" class="filter-select">
                     <option value="all">All Projects</option>
                     <option value="public">Public Sector (percent-for-art)</option>
@@ -743,7 +818,7 @@
                         <thead>
                             <tr>
                                 <th>Project</th>
-                                <th>Est. Art Budget</th>
+                                <th>Est. Art Budget <span class="info-tip" tabindex="0" role="button" aria-label="Budget info" style="vertical-align:middle;"><span class="info-tip-icon" aria-hidden="true" style="border-color:rgba(255,255,255,0.4);color:rgba(255,255,255,0.7);">i</span><span class="info-tip-body" role="tooltip">Estimated art commissioning budget based on 1% of project valuation (industry standard for percent-for-art ordinances and typical voluntary allocations). For ordinance-triggered projects, the range reflects the mandated percentage. For non-ordinance projects, the range is a heuristic estimate.</span></span></th>
                                 <th>Stage</th>
                                 <th>Why It Scored</th>
                                 <th>Project Value</th>
@@ -822,6 +897,20 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
         }
+
+        // ── Tooltip interaction (mobile tap support) ──��───────────────────────
+        document.addEventListener('click', function(e) {
+            // Close all open tooltips
+            document.querySelectorAll('.info-tip.active').forEach(function(tip) {
+                if (!tip.contains(e.target)) tip.classList.remove('active');
+            });
+            // Toggle if clicked on an info-tip icon
+            var icon = e.target.closest('.info-tip');
+            if (icon) {
+                e.stopPropagation();
+                icon.classList.toggle('active');
+            }
+        });
 
         function deepDiveOnPermit(btn) {
             const address = btn.getAttribute('data-address') || '';
