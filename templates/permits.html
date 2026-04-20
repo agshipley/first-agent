@@ -837,10 +837,10 @@
         }
 
         // ── Init ───────────────────────────────────────────────────────────────
-        // Default date: 1 year ago
+        // Default date: 30 days ago
         (function () {
             const d = new Date();
-            d.setFullYear(d.getFullYear() - 1);
+            d.setDate(d.getDate() - 30);
             document.getElementById('dateFrom').value = d.toISOString().slice(0, 10);
         })();
     </script>
