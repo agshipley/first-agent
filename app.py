@@ -245,7 +245,13 @@ def index():
 @app.route("/leads")
 def leads():
     segment = request.args.get("segment", "corporate")
+    geography = request.args.get("geography", "").strip()
     all_leads = get_all_leads_for_segment(segment)
+    if geography:
+        all_leads = [
+            l for l in all_leads
+            if l.get("geographic_area", "").lower() == geography.lower()
+        ]
     return jsonify(all_leads)
 
 @app.route("/run", methods=["GET", "POST"])
@@ -254,6 +260,8 @@ def run():
     geography = request.args.get("geography") or request.form.get("geography", "Greater Los Angeles Area")
     budget = request.args.get("budget") or request.form.get("budget", "Any Budget")
     project_stage = request.args.get("project_stage") or request.form.get("project_stage", "All Stages")
+    permit_address = request.args.get("permit_address", "").strip()
+    permit_description = request.args.get("permit_description", "").strip()
 
     def generate():
         client = anthropic.Anthropic()
@@ -289,13 +297,26 @@ def run():
         else:
             stage_instruction = ""
 
+        permit_context = ""
+        if permit_address:
+            permit_context = (
+                f"\n\nPRIORITY: A specific permit has been flagged from the opportunities monitor. "
+                f"Research this project first: {permit_address}"
+            )
+            if permit_description:
+                permit_context += f" — {permit_description}"
+            permit_context += (
+                ". Find the developer, owner, or key decision-makers associated with this project. "
+                "Include this as your top lead, then find additional related leads in the area."
+            )
+
         if segment == "corporate":
             user_message = (
                 f"Please search for potential corporate art program leads for Tre Borden /Co "
                 f"in the {geography} area. Find at least 5 strong leads, evaluate "
                 f"them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
-                f"{budget_instruction}{stage_instruction}"
+                f"{budget_instruction}{stage_instruction}{permit_context}"
             )
         else:
             user_message = (
@@ -304,7 +325,7 @@ def run():
                 f"opportunities, and public construction projects with budgets over $100k. Find at "
                 f"least 5 strong leads, evaluate them carefully, and save the results to the spreadsheet. "
                 f"Set the `geographic_area` field to \"{geography}\" for every lead you save."
-                f"{budget_instruction}{stage_instruction}"
+                f"{budget_instruction}{stage_instruction}{permit_context}"
             )
 
         existing = get_existing_leads_for_segment(segment)

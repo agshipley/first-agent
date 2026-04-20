@@ -72,6 +72,10 @@
             opacity: 0.6;
         }
 
+        .nav-links a.active {
+            font-weight: 700;
+        }
+
         /* ── Divider ── */
         .divider {
             max-width: 1200px;
@@ -433,6 +437,7 @@
     <header class="site-header">
         <a href="https://www.treborden.com" class="logo" style="text-decoration:none;color:inherit;">TRE<br>BORDEN<br><span>/</span>CO</a>
         <nav class="nav-links">
+            <a href="/" class="active">Lead Finder /</a>
             <a href="/permits-monitor">Opportunities /</a>
             <a href="/reports">Reports /</a>
             <a href="https://www.treborden.com/spaces">Our Work /</a>
@@ -485,9 +490,19 @@
             <span class="enhanced-badge" id="enhancedBadge">+ Includes LA permitting data</span>
         </div>
 
+        <div id="deepDiveBanner" style="display:none; padding: 16px 20px; background: var(--gray-bg); border-left: 3px solid var(--pink-dark); border-radius: 0 4px 4px 0; margin-bottom: 24px;">
+            <div class="section-label" style="margin-bottom: 4px;">Deep Dive Target</div>
+            <div id="deepDiveAddress" style="font-size: 16px; font-weight: 600;"></div>
+            <div id="deepDiveDesc" style="font-size: 14px; color: var(--gray-text); margin-top: 4px;"></div>
+        </div>
+
         <div id="status">
             <div class="section-label">Status</div>
             <div id="log"></div>
+        </div>
+
+        <div id="noResultsMsg" style="display:none; padding: 32px 0; font-size: 15px; color: var(--gray-text); line-height: 1.7;">
+            No new leads found matching these filters. Try broadening your search.
         </div>
 
         <div id="results">
@@ -500,6 +515,9 @@
                 <hr class="section-divider-line">
                 <div class="section-label" style="margin-top: 16px;">Previous Leads</div>
                 <div id="previousLeadCards"></div>
+                <div id="noPreviousLeadsMsg" style="display:none; padding: 16px 0; font-size: 14px; color: var(--gray-text);">
+                    No previous leads match these filters. Run a search to populate.
+                </div>
             </div>
         </div>
     </main>
@@ -545,7 +563,7 @@
                 <div class="${cardClass}">
                     <div class="lead-name">
                         ${lead.company_name}
-                        <span class="badge badge-icp ${icpClass}">ICP ${score}</span>
+                        <span class="badge badge-icp ${icpClass}" title="Ideal Customer Profile score (1\u201310) based on fit with Tre Borden /Co\u2019s art commissioning services">ICP ${score}</span>
                         ${newBadge}
                     </div>
                     <div class="lead-meta">${lead.type} — ${lead.location}${dateLine}</div>
@@ -584,6 +602,8 @@
                 btn.innerHTML = '<span class="spinner"></span>Searching...';
                 status.style.display = "block";
                 results.style.display = "none";
+                document.getElementById("noResultsMsg").style.display = "none";
+                document.getElementById("noPreviousLeadsMsg").style.display = "none";
                 log.innerHTML = "";
                 newLeadCards.innerHTML = "";
                 previousLeadCards.innerHTML = "";
@@ -597,15 +617,21 @@
             // Await existing leads before opening the stream so previousNames is
             // populated before DONE fires (race condition fix)
             const previousNames = new Set();
+            const leadsFilterParams = {segment: selectedSegment, geography};
             try {
-                const r = await fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString());
+                const r = await fetch("/leads?" + new URLSearchParams(leadsFilterParams).toString());
                 const existing = await r.json();
                 existing.forEach(l => previousNames.add(l.company_name.toLowerCase()));
             } catch(e) {}
 
             let receivedData = false;
 
-            const eventSource = new EventSource("/run?" + new URLSearchParams({segment: selectedSegment, geography, budget, project_stage}).toString());
+            const runParams = {segment: selectedSegment, geography, budget, project_stage};
+            if (window._permitDeepDive) {
+                runParams.permit_address = window._permitDeepDive.address;
+                runParams.permit_description = window._permitDeepDive.description;
+            }
+            const eventSource = new EventSource("/run?" + new URLSearchParams(runParams).toString());
 
             eventSource.onmessage = function(e) {
                 const data = e.data;
@@ -624,20 +650,24 @@
                             newLeads.forEach(lead => {
                                 newLeadCards.insertAdjacentHTML("beforeend", renderLeadCard(lead, true));
                             });
+                        } else {
+                            document.getElementById("noResultsMsg").style.display = "block";
                         }
 
-                        fetch("/leads?" + new URLSearchParams({segment: selectedSegment}).toString())
+                        fetch("/leads?" + new URLSearchParams(leadsFilterParams).toString())
                             .then(r => r.json())
                             .then(allLeads => {
                                 const previous = allLeads.filter(l =>
                                     previousNames.has(l.company_name.toLowerCase())
                                 );
+                                results.style.display = "block";
+                                previousLeadsSection.style.display = "block";
                                 if (previous.length > 0) {
-                                    results.style.display = "block";
-                                    previousLeadsSection.style.display = "block";
                                     previous.forEach(lead => {
                                         previousLeadCards.insertAdjacentHTML("beforeend", renderLeadCard(lead, false));
                                     });
+                                } else {
+                                    document.getElementById("noPreviousLeadsMsg").style.display = "block";
                                 }
                             })
                             .catch(() => {});
@@ -668,6 +698,43 @@
                 addLogLine("Unable to connect. Please wait a moment and try again.", false);
             };
         }
+
+        // ── Deep Dive from Permits page ──────────────────────────────────────
+        (function() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('deep_dive') !== '1') return;
+
+            const address = params.get('address') || '';
+            const description = params.get('description') || '';
+            const city = params.get('city') || '';
+
+            if (!address) return;
+
+            // Show the banner
+            document.getElementById('deepDiveBanner').style.display = 'block';
+            document.getElementById('deepDiveAddress').textContent = address;
+            if (description) {
+                document.getElementById('deepDiveDesc').textContent = description;
+            }
+
+            // Map city key to geography select value
+            const cityMap = {
+                'los_angeles': 'Greater Los Angeles Area',
+                'new_york': 'New York',
+            };
+            if (cityMap[city]) {
+                document.getElementById('geoSelect').value = cityMap[city];
+            }
+
+            // Store context for the deep dive and auto-start
+            window._permitDeepDive = { address, description };
+
+            // Clean the URL
+            history.replaceState(null, '', '/');
+
+            // Auto-start the search
+            runAgent();
+        })();
     </script>
 </body>
 </html>

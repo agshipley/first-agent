@@ -35,7 +35,7 @@
             align-items: flex-start;
             justify-content: space-between;
             padding: 32px 48px;
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
         }
 
@@ -66,12 +66,12 @@
         .nav-links a:hover { opacity: 0.6; }
         .nav-links a.active { font-weight: 700; }
 
-        .divider { max-width: 1400px; margin: 0 auto; padding: 0 48px; }
+        .divider { max-width: 1200px; margin: 0 auto; padding: 0 48px; }
         .divider hr { border: none; border-top: 2.5px solid var(--black); margin: 0; }
 
         /* ── Main ── */
         .main {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 48px 48px 80px;
         }
@@ -465,8 +465,8 @@
     <header class="site-header">
         <a href="https://www.treborden.com" class="logo" style="text-decoration:none;color:inherit;">TRE<br>BORDEN<br><span>/</span>CO</a>
         <nav class="nav-links">
-            <a href="/permits-monitor" class="active">Opportunities /</a>
             <a href="/">Lead Finder /</a>
+            <a href="/permits-monitor" class="active">Opportunities /</a>
             <a href="/reports">Reports /</a>
             <a href="https://www.treborden.com/spaces">Our Work /</a>
             <a href="https://www.treborden.com/about_us">About Us /</a>
@@ -583,7 +583,6 @@
 
         <div id="resultsArea">
             <div class="empty-state">
-                <div class="empty-icon">🎨</div>
                 <div>Select filters above and click <strong>Find Opportunities</strong> to surface art commissioning leads from live permit data.</div>
             </div>
         </div>
@@ -690,7 +689,7 @@
             const count = document.getElementById('resultsCount');
 
             if (permits.length === 0) {
-                area.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div>No High or Medium relevance opportunities matched these filters. Try a lower minimum project value or a wider date range.</div></div>';
+                area.innerHTML = '<div class="empty-state"><div>No High or Medium relevance opportunities matched these filters. Try a lower minimum project value or a wider date range.</div></div>';
                 meta.style.display = 'none';
                 return;
             }
@@ -733,7 +732,7 @@
                     <td class="td-value">${escHtml(p.valuation_display || '')}</td>
                     <td class="td-date">${escHtml(dateStr)}</td>
                     <td>
-                        <a class="btn-deep-dive" href="/" target="_blank" rel="noopener" title="Open Lead Finder">Deep Dive \u2192</a>
+                        <button class="btn-deep-dive" data-address="${escHtml(p.address)}" data-description="${escHtml(descClean)}" data-city="${escHtml(currentCity)}" onclick="deepDiveOnPermit(this)">Deep Dive \u2192</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -822,6 +821,19 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function deepDiveOnPermit(btn) {
+            const address = btn.getAttribute('data-address') || '';
+            const description = btn.getAttribute('data-description') || '';
+            const city = btn.getAttribute('data-city') || '';
+            const params = new URLSearchParams({
+                deep_dive: '1',
+                address: address,
+                description: description,
+                city: city,
+            });
+            window.open('/?' + params.toString(), '_blank');
         }
 
         // ── Init ───────────────────────────────────────────────────────────────

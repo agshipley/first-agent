@@ -27,6 +27,73 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
 
 
+
+# ── /leads endpoint ────────���─────────────────────────────────────────────────
+
+class TestLeadsEndpoint:
+
+    def _create_leads_file(self, tmp_data_dir):
+        """Create a leads.xlsx with two leads in different geographies."""
+        import openpyxl
+        from tools import HEADERS
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Corporate"
+        ws.append(HEADERS)
+        # Lead in LA
+        row_la = ["Acme Corp", "Real Estate", "Los Angeles, CA",
+                  "Greater Los Angeles Area", "Big project", "", "", "",
+                  8, "", "", "", "", "", "2026-04-01", ""]
+        ws.append(row_la)
+        # Lead in NY
+        row_ny = ["NYC Dev LLC", "Real Estate", "New York, NY", "New York",
+                  "Manhattan tower", "", "", "", 7, "", "", "", "", "",
+                  "2026-04-02", ""]
+        ws.append(row_ny)
+        wb.save(tmp_data_dir / "leads.xlsx")
+
+    def test_leads_returns_all_for_segment(self, client, tmp_data_dir):
+        self._create_leads_file(tmp_data_dir)
+        resp = client.get("/leads?segment=corporate")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert len(data) == 2
+
+    def test_leads_filtered_by_geography(self, client, tmp_data_dir):
+        self._create_leads_file(tmp_data_dir)
+        resp = client.get("/leads?segment=corporate&geography=New+York")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert len(data) == 1
+        assert data[0]["company_name"] == "NYC Dev LLC"
+
+    def test_leads_geography_filter_case_insensitive(self, client, tmp_data_dir):
+        self._create_leads_file(tmp_data_dir)
+        resp = client.get("/leads?segment=corporate&geography=new+york")
+        data = resp.get_json()
+        assert len(data) == 1
+
+    def test_leads_no_geography_returns_all(self, client, tmp_data_dir):
+        self._create_leads_file(tmp_data_dir)
+        resp = client.get("/leads?segment=corporate")
+        data = resp.get_json()
+        assert len(data) == 2
+
+    def test_leads_empty_when_no_spreadsheet(self, client):
+        resp = client.get("/leads?segment=corporate")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data == []
+
+    def test_leads_geography_no_match_returns_empty(self, client, tmp_data_dir):
+        self._create_leads_file(tmp_data_dir)
+        resp = client.get("/leads?segment=corporate&geography=Chicago")
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data == []
+
+
 # ── Download ───────────────────────────────────────────────────────────────────
 
 class TestDownloadEndpoint:
