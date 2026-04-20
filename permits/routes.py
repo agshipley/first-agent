@@ -8,7 +8,9 @@ Routes:
   GET /api/permits/metadata     → returns connector metadata
 """
 
-from datetime import date
+import json
+import os
+from datetime import date, datetime, timezone
 
 from flask import Blueprint, request, jsonify, render_template
 
@@ -220,3 +222,76 @@ def api_permits_metadata():
         })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+# ── Feedback endpoints ──────────────────────────────────────────────────────
+
+_VALID_VERDICTS = {"up", "down", "unset"}
+
+
+def _feedback_path() -> str:
+    data_dir = os.environ.get("DATA_DIR", ".")
+    return os.path.join(data_dir, "feedback.jsonl")
+
+
+def _get_current_feedback(permit_ids: list[str]) -> dict[str, dict]:
+    """Read JSONL and return latest verdict per permit_id."""
+    path = _feedback_path()
+    if not os.path.exists(path):
+        return {}
+    latest: dict[str, dict] = {}
+    id_set = set(permit_ids)
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            pid = record.get("permit_id")
+            if pid in id_set:
+                latest[pid] = {
+                    "verdict": record.get("verdict", "unset"),
+                    "reason": record.get("reason"),
+                }
+    return latest
+
+
+@permits_bp.route("/api/feedback", methods=["POST"])
+def post_feedback():
+    data = request.get_json(silent=True) or {}
+    permit_id = data.get("permit_id", "").strip()
+    verdict = data.get("verdict", "").strip()
+
+    if not permit_id:
+        return jsonify({"error": "permit_id is required"}), 400
+    if verdict not in _VALID_VERDICTS:
+        return jsonify({"error": f"Invalid verdict: must be up, down, or unset"}), 400
+
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_id": "default",
+        "permit_id": permit_id,
+        "verdict": verdict,
+        "reason": data.get("reason") or None,
+        "relevance_at_feedback": data.get("relevance_at_feedback"),
+        "city": data.get("city"),
+        "filter_state": data.get("filter_state"),
+    }
+
+    path = _feedback_path()
+    with open(path, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+    return jsonify({"status": "ok"})
+
+
+@permits_bp.route("/api/feedback", methods=["GET"])
+def get_feedback():
+    raw = request.args.get("permit_ids", "")
+    permit_ids = [pid.strip() for pid in raw.split(",") if pid.strip()]
+    if not permit_ids:
+        return jsonify({})
+    return jsonify(_get_current_feedback(permit_ids))

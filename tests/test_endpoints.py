@@ -665,3 +665,119 @@ class TestDeepDiveEndpoint:
                            content_type="application/json")
         assert resp.status_code == 200
         assert resp.content_type.startswith("text/event-stream")
+
+
+# ── /api/feedback endpoints ──────────────────────────────────────────────────
+
+class TestFeedbackEndpoints:
+
+    def test_post_feedback_valid_up(self, client, tmp_data_dir):
+        resp = client.post("/api/feedback",
+                           data=json.dumps({
+                               "permit_id": "TEST-001",
+                               "verdict": "up",
+                               "relevance_at_feedback": "High",
+                               "city": "los_angeles",
+                           }),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "ok"
+        # Verify file was written
+        feedback_path = tmp_data_dir / "feedback.jsonl"
+        assert feedback_path.exists()
+        lines = feedback_path.read_text().strip().split("\n")
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["permit_id"] == "TEST-001"
+        assert record["verdict"] == "up"
+
+    def test_post_feedback_valid_down_with_reason(self, client, tmp_data_dir):
+        resp = client.post("/api/feedback",
+                           data=json.dumps({
+                               "permit_id": "TEST-002",
+                               "verdict": "down",
+                               "reason": "Project already completed",
+                           }),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        feedback_path = tmp_data_dir / "feedback.jsonl"
+        record = json.loads(feedback_path.read_text().strip())
+        assert record["reason"] == "Project already completed"
+
+    def test_post_feedback_invalid_verdict(self, client):
+        resp = client.post("/api/feedback",
+                           data=json.dumps({
+                               "permit_id": "TEST-001",
+                               "verdict": "maybe",
+                           }),
+                           content_type="application/json")
+        assert resp.status_code == 400
+        assert "verdict" in resp.get_json()["error"].lower()
+
+    def test_post_feedback_missing_permit_id(self, client):
+        resp = client.post("/api/feedback",
+                           data=json.dumps({"verdict": "up"}),
+                           content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_post_feedback_unset(self, client, tmp_data_dir):
+        resp = client.post("/api/feedback",
+                           data=json.dumps({
+                               "permit_id": "TEST-001",
+                               "verdict": "unset",
+                           }),
+                           content_type="application/json")
+        assert resp.status_code == 200
+
+    def test_get_feedback_returns_latest_verdict(self, client, tmp_data_dir):
+        # Post up, then down — latest should be down
+        client.post("/api/feedback",
+                    data=json.dumps({"permit_id": "TEST-001", "verdict": "up"}),
+                    content_type="application/json")
+        client.post("/api/feedback",
+                    data=json.dumps({"permit_id": "TEST-001", "verdict": "down",
+                                     "reason": "Changed my mind"}),
+                    content_type="application/json")
+        resp = client.get("/api/feedback?permit_ids=TEST-001")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["TEST-001"]["verdict"] == "down"
+        assert data["TEST-001"]["reason"] == "Changed my mind"
+
+    def test_get_feedback_no_matching_ids(self, client):
+        resp = client.get("/api/feedback?permit_ids=NONEXISTENT-001")
+        assert resp.status_code == 200
+        assert resp.get_json() == {}
+
+    def test_get_feedback_empty_params(self, client):
+        resp = client.get("/api/feedback")
+        assert resp.status_code == 200
+        assert resp.get_json() == {}
+
+    def test_get_feedback_multiple_permits(self, client, tmp_data_dir):
+        client.post("/api/feedback",
+                    data=json.dumps({"permit_id": "A", "verdict": "up"}),
+                    content_type="application/json")
+        client.post("/api/feedback",
+                    data=json.dumps({"permit_id": "B", "verdict": "down"}),
+                    content_type="application/json")
+        resp = client.get("/api/feedback?permit_ids=A,B,C")
+        data = resp.get_json()
+        assert data["A"]["verdict"] == "up"
+        assert data["B"]["verdict"] == "down"
+        assert "C" not in data
+
+    def test_feedback_file_created_on_first_write(self, client, tmp_data_dir):
+        feedback_path = tmp_data_dir / "feedback.jsonl"
+        assert not feedback_path.exists()
+        client.post("/api/feedback",
+                    data=json.dumps({"permit_id": "X", "verdict": "up"}),
+                    content_type="application/json")
+        assert feedback_path.exists()
+
+    def test_malformed_lines_skipped(self, client, tmp_data_dir):
+        feedback_path = tmp_data_dir / "feedback.jsonl"
+        feedback_path.write_text('not json\n{"permit_id":"OK","verdict":"up","reason":null}\n')
+        resp = client.get("/api/feedback?permit_ids=OK")
+        data = resp.get_json()
+        assert data["OK"]["verdict"] == "up"

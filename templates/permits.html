@@ -430,6 +430,62 @@
             opacity: 0.4;
         }
 
+        /* ── Feedback buttons ── */
+        .feedback-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .feedback-btns {
+            display: flex;
+            gap: 4px;
+        }
+
+        .fb-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1.5px solid var(--gray-light);
+            background: var(--white);
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1;
+            transition: all 0.15s;
+            padding: 0;
+        }
+
+        .fb-btn:hover { border-color: var(--black); }
+
+        .fb-btn.fb-up-active {
+            background: var(--pink);
+            border-color: var(--pink-dark);
+        }
+
+        .fb-btn.fb-down-active {
+            background: var(--gray-bg);
+            border-color: var(--gray-text);
+        }
+
+        .fb-reason {
+            display: none;
+            width: 160px;
+            padding: 5px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--gray-light);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 11px;
+            color: var(--black);
+            background: var(--white);
+        }
+
+        .fb-reason:focus { outline: none; border-color: var(--pink-dark); }
+        .fb-reason.visible { display: block; }
+
         /* ── Toast ── */
         #toast {
             position: fixed;
@@ -815,6 +871,13 @@
                     <td class="td-date">${escHtml(dateStr)}</td>
                     <td>
                         <button class="btn-deep-dive" data-address="${escHtml(p.address)}" data-description="${escHtml(descClean)}" data-city="${escHtml(currentCity)}" onclick="deepDiveOnPermit(this)">Deep Dive \u2192</button>
+                        <div class="feedback-wrap" data-permit-id="${escHtml(p.permit_id)}" data-relevance="${escHtml(p.relevance || '')}">
+                            <div class="feedback-btns">
+                                <button class="fb-btn fb-up" onclick="setFeedback(this,'up')" title="Good lead">&#x1F44D;</button>
+                                <button class="fb-btn fb-down" onclick="setFeedback(this,'down')" title="Not a fit">&#x1F44E;</button>
+                            </div>
+                            <input class="fb-reason" type="text" placeholder="Optional: why wasn't this a fit?" maxlength="200" onblur="submitReason(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                        </div>
                     </td>
                 </tr>`;
             }).join('');
@@ -836,6 +899,9 @@
                         <tbody>${rows}</tbody>
                     </table>
                 </div>`;
+
+            // Restore feedback state for visible permits
+            restoreFeedbackState(permits);
         }
 
         function budgetCellHtml(p) {
@@ -918,6 +984,96 @@
                 icon.classList.toggle('active');
             }
         });
+
+        // ── Feedback ───────────────────────────────────────────────────────────
+        function _currentFilterState() {
+            return {
+                city: currentCity,
+                source: currentSource,
+                art_budget_min: document.getElementById('artBudgetMin').value,
+                min_valuation: document.getElementById('minVal').value,
+                sector: document.getElementById('sectorFilter').value,
+            };
+        }
+
+        function setFeedback(btn, verdict) {
+            var wrap = btn.closest('.feedback-wrap');
+            var permitId = wrap.getAttribute('data-permit-id');
+            var relevance = wrap.getAttribute('data-relevance');
+            var upBtn = wrap.querySelector('.fb-up');
+            var downBtn = wrap.querySelector('.fb-down');
+            var reasonInput = wrap.querySelector('.fb-reason');
+
+            // Toggle: if already active, unset
+            var isActive = (verdict === 'up' && upBtn.classList.contains('fb-up-active'))
+                        || (verdict === 'down' && downBtn.classList.contains('fb-down-active'));
+            var newVerdict = isActive ? 'unset' : verdict;
+
+            // Update button states
+            upBtn.classList.toggle('fb-up-active', newVerdict === 'up');
+            downBtn.classList.toggle('fb-down-active', newVerdict === 'down');
+
+            // Show reason input only for thumbs down
+            reasonInput.classList.toggle('visible', newVerdict === 'down');
+            if (newVerdict !== 'down') reasonInput.value = '';
+
+            // Send to backend
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    permit_id: permitId,
+                    verdict: newVerdict,
+                    reason: null,
+                    relevance_at_feedback: relevance,
+                    city: currentCity,
+                    filter_state: _currentFilterState(),
+                }),
+            }).catch(function() {});
+        }
+
+        function submitReason(input) {
+            var reason = input.value.trim();
+            if (!reason) return;
+            var wrap = input.closest('.feedback-wrap');
+            var permitId = wrap.getAttribute('data-permit-id');
+            var relevance = wrap.getAttribute('data-relevance');
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    permit_id: permitId,
+                    verdict: 'down',
+                    reason: reason,
+                    relevance_at_feedback: relevance,
+                    city: currentCity,
+                    filter_state: _currentFilterState(),
+                }),
+            }).catch(function() {});
+        }
+
+        function restoreFeedbackState(permits) {
+            var ids = permits.map(function(p) { return p.permit_id; }).filter(Boolean);
+            if (ids.length === 0) return;
+            fetch('/api/feedback?permit_ids=' + encodeURIComponent(ids.join(',')))
+                .then(function(r) { return r.json(); })
+                .then(function(feedback) {
+                    Object.keys(feedback).forEach(function(pid) {
+                        var wrap = document.querySelector('.feedback-wrap[data-permit-id="' + CSS.escape(pid) + '"]');
+                        if (!wrap) return;
+                        var v = feedback[pid].verdict;
+                        if (v === 'up') wrap.querySelector('.fb-up').classList.add('fb-up-active');
+                        if (v === 'down') {
+                            wrap.querySelector('.fb-down').classList.add('fb-down-active');
+                            wrap.querySelector('.fb-reason').classList.add('visible');
+                            if (feedback[pid].reason) {
+                                wrap.querySelector('.fb-reason').value = feedback[pid].reason;
+                            }
+                        }
+                    });
+                })
+                .catch(function() {});
+        }
 
         function deepDiveOnPermit(btn) {
             const address = btn.getAttribute('data-address') || '';
