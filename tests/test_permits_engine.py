@@ -896,12 +896,13 @@ class TestTypologyScoring:
         result = score_permit(p, la_ordinances)
         assert result.relevance == RelevanceLevel.NONE
 
-    def test_cultural_institution_high_at_15m(self, la_ordinances):
+    def test_cultural_institution_high_at_20m(self, la_ordinances):
+        # Cultural/civic High floor is $20M
         p = make_permit(
             city="Somewhere", state="XX",
             occupancy_type=OccupancyType.CIVIC,
             project_description="New museum with gallery spaces",
-            valuation=15_000_000.0,
+            valuation=20_000_000.0,
         )
         result = score_permit(p, la_ordinances)
         assert result.relevance == RelevanceLevel.HIGH

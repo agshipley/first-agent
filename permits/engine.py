@@ -71,12 +71,15 @@ _IRRELEVANT_OCCUPANCY = {
 
 # B. KEYWORD SIGNALS — expanded lists
 _HIGH_SIGNAL_KEYWORDS = [
-    "hotel", "lobby", "plaza", "atrium", "mezzanine",
+    "hotel", "lobby", "plaza", "atrium", "mezzanine", "rotunda", "concourse",
     "public open space", "popos", "amenity", "ground floor retail",
-    "mixed-use", "flagship", "headquarters", "campus",
+    "mixed-use", "flagship", "headquarters", "campus", "branded residence",
+    "placemaking", "activation",
     "museum", "gallery", "theater", "theatre", "cultural", "library",
     "university", "hospital", "civic", "terminal", "transit center",
     "station", "waterfront", "landmark", "tower", "high-rise",
+    "sanctuary", "nave", "basilica",
+    "lab", "laboratory", "life science", "biotech",
 ]
 
 _LOW_SIGNAL_KEYWORDS = [
@@ -115,12 +118,16 @@ _STATUS_WEIGHT: dict[PermitStatus, int] = {
 }
 
 # E. VALUATION THRESHOLDS
-_VALUATION_NONE_FLOOR = 2_000_000         # below this, no relevance
-_VALUATION_MEDIUM_FLOOR = 10_000_000      # general commercial
-_VALUATION_HIGH_FLOOR = 25_000_000        # general high
-_VALUATION_HOTEL_HIGH_FLOOR = 15_000_000  # hotels + cultural
-_VALUATION_PUBLIC_HIGH_FLOOR = 5_000_000  # strong-ordinance public
-_VALUATION_LANDMARK = 50_000_000          # auto-qualifies for High consideration
+_VALUATION_NONE_FLOOR = 2_000_000                 # below this, no relevance
+_VALUATION_MEDIUM_FLOOR = 10_000_000              # general commercial
+_VALUATION_HIGH_FLOOR = 25_000_000                # general high
+_VALUATION_HOTEL_HIGH_FLOOR = 15_000_000          # hotels
+_VALUATION_HEALTHCARE_HIGH_FLOOR = 20_000_000     # healthcare
+_VALUATION_CULTURAL_HIGH_FLOOR = 20_000_000       # cultural + educational
+_VALUATION_PUBLIC_HIGH_FLOOR = 5_000_000          # strong-ordinance public
+_VALUATION_AIRPORT_HIGH_FLOOR = 50_000_000        # airport/transit
+_VALUATION_LIFESCI_HIGH_FLOOR = 75_000_000        # life sciences
+_VALUATION_LANDMARK = 50_000_000                  # auto-qualifies for High
 
 # F. SCORE THRESHOLDS for relevance levels
 _HIGH_THRESHOLD = 6
@@ -179,20 +186,73 @@ def _is_hotel_keyword(description: str) -> bool:
     return bool(re.search(r"\bhotel\b", description.lower()))
 
 
-def _owner_score(permit: CanonicalPermit) -> tuple[int, list[str], bool]:
+def _is_airport_transit(permit: CanonicalPermit) -> bool:
+    """Detect airport/transit typology from description or owner."""
+    desc = (permit.project_description or "").lower()
+    airport_kws = ["airport", "terminal", "concourse", "airfield", "runway"]
+    transit_kws = ["transit center", "transit station", "rail station", "metro station"]
+    for kw in airport_kws + transit_kws:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc):
+            return True
+    candidate = " ".join(
+        part for part in [permit.owner_name, permit.applicant_name] if part
+    ).lower()
+    for pattern in _OWNER_PATTERNS.get("airport_transit_patterns", []):
+        if pattern.lower() in candidate:
+            return True
+    return False
+
+
+def _is_life_sciences(permit: CanonicalPermit) -> bool:
+    """Detect life sciences typology from description or owner."""
+    desc = (permit.project_description or "").lower()
+    ls_kws = ["life science", "biotech", "pharmaceutical", "research campus",
+              "laboratory", "lab building"]
+    for kw in ls_kws:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc):
+            return True
+    candidate = " ".join(
+        part for part in [permit.owner_name, permit.applicant_name] if part
+    ).lower()
+    ls_owner_kws = ["alexandria", "biomed", "breakthrough properties", "genentech"]
+    for kw in ls_owner_kws:
+        if kw in candidate:
+            return True
+    return False
+
+
+def _is_healthcare(permit: CanonicalPermit) -> bool:
+    """Detect healthcare typology from description or owner."""
+    desc = (permit.project_description or "").lower()
+    if re.search(r"\bhospital\b", desc):
+        return True
+    if re.search(r"\bmedical center\b", desc):
+        return True
+    candidate = " ".join(
+        part for part in [permit.owner_name, permit.applicant_name] if part
+    ).lower()
+    for pattern in _OWNER_PATTERNS.get("healthcare_system_patterns", []):
+        if pattern.lower() in candidate:
+            return True
+    return False
+
+
+def _owner_score(permit: CanonicalPermit) -> tuple[int, list[str], bool, bool, bool]:
     """
     Score based on owner/applicant name matching against known patterns.
-    Returns (score_delta, reasons, is_hotel_owner).
+    Returns (score_delta, reasons, is_hotel_owner, is_healthcare_owner, is_airport_owner).
     """
     candidate = " ".join(
         part for part in [permit.owner_name, permit.applicant_name] if part
     ).lower()
     if not candidate:
-        return 0, [], False
+        return 0, [], False, False, False
 
     score = 0
     reasons: list[str] = []
     is_hotel_owner = False
+    is_healthcare_owner = False
+    is_airport_owner = False
 
     # Major developer match
     for pattern in _OWNER_PATTERNS.get("developer_patterns", []):
@@ -209,6 +269,37 @@ def _owner_score(permit: CanonicalPermit) -> tuple[int, list[str], bool]:
             reasons.append(f"Hotel brand ({pattern.title()}) — hotels are strong art commissioning typology.")
             break
 
+    # Healthcare system match
+    for pattern in _OWNER_PATTERNS.get("healthcare_system_patterns", []):
+        if pattern.lower() in candidate:
+            score += 2
+            is_healthcare_owner = True
+            reasons.append(f"Healthcare system ({pattern.title()}) — healthcare campuses reliably commission art.")
+            break
+
+    # Airport/transit match
+    for pattern in _OWNER_PATTERNS.get("airport_transit_patterns", []):
+        if pattern.lower() in candidate:
+            score += 2
+            is_airport_owner = True
+            reasons.append(f"Airport/transit authority ({pattern.title()}) — major infrastructure with public art programs.")
+            break
+
+    # Cultural institution match
+    for pattern in _OWNER_PATTERNS.get("cultural_institution_patterns", []):
+        if pattern.lower() in candidate:
+            score += 2
+            reasons.append(f"Cultural institution ({pattern.title()}) — strong art commissioning tradition.")
+            break
+
+    # Cultural keywords (generic)
+    if not any("Cultural" in r for r in reasons):
+        for kw in _OWNER_PATTERNS.get("cultural_keywords", []):
+            if kw.lower() in candidate:
+                score += 1
+                reasons.append("Cultural institution owner — strong art commissioning tradition.")
+                break
+
     # Tech company match
     for pattern in _OWNER_PATTERNS.get("tech_company_patterns", []):
         if pattern.lower() in candidate:
@@ -216,14 +307,7 @@ def _owner_score(permit: CanonicalPermit) -> tuple[int, list[str], bool]:
             reasons.append(f"Major tech company ({pattern.title()}) — campus/HQ projects often include art programs.")
             break
 
-    # Cultural institution match
-    for kw in _OWNER_PATTERNS.get("cultural_keywords", []):
-        if kw.lower() in candidate:
-            score += 1
-            reasons.append("Cultural institution owner — strong art commissioning tradition.")
-            break
-
-    return score, reasons, is_hotel_owner
+    return score, reasons, is_hotel_owner, is_healthcare_owner, is_airport_owner
 
 
 def _sqft_score(raw_data: dict) -> tuple[int, Optional[str]]:
@@ -439,12 +523,28 @@ def _compute_score(
     scoring_factors: list[str] = []
     keyword_signals: list[str] = []
 
-    # A. TYPOLOGY
+    # A. TYPOLOGY — detect special typologies first
     is_hotel = _is_hotel_keyword(permit.project_description)
-    if is_hotel:
+    is_airport = _is_airport_transit(permit)
+    is_lifesci = _is_life_sciences(permit)
+    is_healthcare = _is_healthcare(permit)
+
+    if is_airport:
+        score += 3
+        reasons.append("Airport/transit project — major infrastructure with dedicated public art programs.")
+        scoring_factors.append("typology:airport_transit:+3")
+    elif is_hotel:
         score += 3
         reasons.append("Hotel project — strong typology for art commissioning regardless of ordinance status.")
         scoring_factors.append("typology:hotel:+3")
+    elif is_healthcare:
+        score += 3
+        reasons.append("Healthcare facility — hospitals and medical centers reliably commission healing arts.")
+        scoring_factors.append("typology:healthcare:+3")
+    elif is_lifesci:
+        score += 1
+        reasons.append("Life sciences facility — research campuses increasingly include public-facing art.")
+        scoring_factors.append("typology:life_sciences:+1")
     else:
         typology_bump = _TYPOLOGY_BUMP.get(permit.occupancy_type, 0)
         if typology_bump > 0:
@@ -460,15 +560,19 @@ def _compute_score(
             scoring_factors.append(f"typology:{permit.occupancy_type.value}:+{typology_bump}")
 
     # B. OWNER TYPE
-    owner_delta, owner_reasons, is_hotel_owner = _owner_score(permit)
+    owner_delta, owner_reasons, is_hotel_owner, is_healthcare_owner, is_airport_owner = _owner_score(permit)
     if owner_delta > 0:
         score += owner_delta
         reasons.extend(owner_reasons)
         scoring_factors.append(f"owner:+{owner_delta}")
         if is_hotel_owner and not is_hotel:
             is_hotel = True
-            score += 2  # upgrade to hotel typology
+            score += 2
             scoring_factors.append("owner_hotel_upgrade:+2")
+        if is_healthcare_owner and not is_healthcare:
+            is_healthcare = True
+        if is_airport_owner and not is_airport:
+            is_airport = True
 
     # Check public-sector owner for ordinance purposes
     public_patterns = permit.raw_data.get("public_sector_owner_patterns", [])
@@ -574,6 +678,9 @@ def _determine_relevance(
         return RelevanceLevel.NONE
 
     is_hotel = _is_hotel_keyword(permit.project_description)
+    is_airport = _is_airport_transit(permit)
+    is_lifesci = _is_life_sciences(permit)
+    is_healthcare = _is_healthcare(permit)
     is_strong_public = (
         ord_result.triggered
         and ord_result.practical_strength == "strong"
@@ -581,13 +688,19 @@ def _determine_relevance(
 
     # HIGH determination
     if score >= _HIGH_THRESHOLD:
-        # Apply valuation floors by typology
+        # Apply valuation floors by typology (most specific first)
         if is_strong_public and val >= _VALUATION_PUBLIC_HIGH_FLOOR:
             return RelevanceLevel.HIGH
         if is_hotel and val >= _VALUATION_HOTEL_HIGH_FLOOR:
             return RelevanceLevel.HIGH
+        if is_healthcare and val >= _VALUATION_HEALTHCARE_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
+        if is_airport and val >= _VALUATION_AIRPORT_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
+        if is_lifesci and val >= _VALUATION_LIFESCI_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
         if permit.occupancy_type in (OccupancyType.CIVIC, OccupancyType.EDUCATIONAL):
-            if val >= _VALUATION_HOTEL_HIGH_FLOOR:
+            if val >= _VALUATION_CULTURAL_HIGH_FLOOR:
                 return RelevanceLevel.HIGH
         if val >= _VALUATION_LANDMARK:
             return RelevanceLevel.HIGH
