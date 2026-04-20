@@ -2,19 +2,25 @@
 Permits Intelligence Engine — art commissioning relevance scoring.
 
 Entry point:
-  score_permit(permit, ordinances) → ScoredPermit
+  score_permit(permit, ordinances) -> ScoredPermit
 
-The engine reads only the CanonicalPermit schema and the ordinance JSON structure.
-It has no knowledge of Socrata, LADBS field names, or any city connector internals.
+The engine reads only the CanonicalPermit schema, the ordinance JSON, and
+the owner_patterns.json configuration. It has no knowledge of Socrata,
+LADBS field names, or any city connector internals.
 
-Current capabilities (Phase 1):
-  - Percent-for-art ordinance matching (does this permit trigger an ordinance?)
-  - Estimated art budget (ordinance % × project valuation, expressed as a range)
-  - Art commissioning relevance score: High / Medium / Low / None
+Scoring philosophy (v2):
+  Typology and owner signals are the strongest predictors of actual art
+  commissioning. Hotels, cultural institutions, and landmark towers almost
+  always include art programs regardless of ordinance status. Public-sector
+  projects with strong percent-for-art ordinances are high certainty.
 
-Scoring logic is programmatic. No LLM calls. Each decision is traceable to a
-specific rule and can be verified or overridden by updating ordinance data or
-the scoring constants below.
+  Weak ordinances (LA PADFP, SF Section 429) have historically generated
+  few commissions and are treated as soft contextual signals, not primary
+  scoring factors.
+
+  Scoring is programmatic. No LLM calls. Each decision is traceable to a
+  specific rule and can be verified by updating ordinance data, owner
+  patterns, or the scoring constants below.
 """
 
 from __future__ import annotations
@@ -22,159 +28,133 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 from permits.schema import CanonicalPermit, OccupancyType, PermitStatus, PermitType
 
 
-# ── Scoring constants ─────────────────────────────────────────────────────────
-# These drive the relevance score. Change them here, not scattered through logic.
+# ── Owner pattern loader ─────────────────────────────────────────────────────
 
-# Occupancy types ordered by art commissioning relevance.
-# Commercial and civic spaces are the core market; residential multi-family
-# qualifies under PADFP but is lower priority for Tre Borden /Co specifically.
-_OCCUPANCY_WEIGHT: dict[OccupancyType, int] = {
-    OccupancyType.COMMERCIAL:         3,
-    OccupancyType.CIVIC:              3,
-    OccupancyType.MIXED_USE:          3,
+def _load_owner_patterns() -> dict:
+    path = os.path.join(os.path.dirname(__file__), "scoring", "owner_patterns.json")
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+_OWNER_PATTERNS = _load_owner_patterns()
+
+
+# ── Scoring constants ────────────────────────────────────────────────────────
+
+# A. TYPOLOGY — strongest scoring factor
+# Maps occupancy type -> score bump. Hotels and cultural get the biggest boost.
+_TYPOLOGY_BUMP: dict[OccupancyType, int] = {
+    OccupancyType.COMMERCIAL:         1,   # base; hotels get extra via keywords
+    OccupancyType.CIVIC:              2,
     OccupancyType.EDUCATIONAL:        2,
-    OccupancyType.RESIDENTIAL_MULTI:  1,
+    OccupancyType.MIXED_USE:          1,
+    OccupancyType.RESIDENTIAL_MULTI:  0,
     OccupancyType.INDUSTRIAL:         0,
     OccupancyType.RESIDENTIAL_SINGLE: 0,
-    OccupancyType.OTHER:              1,
+    OccupancyType.OTHER:              0,
 }
 
-# Per-occupancy reason text shown in "Why It Scored".
-# Commercial and Other are None — they rely on keywords and ordinance to differentiate.
-_OCCUPANCY_SPECIFIC_REASONS: dict[OccupancyType, Optional[str]] = {
-    OccupancyType.CIVIC:              "Civic/public facility — strong art commissioning tradition.",
-    OccupancyType.EDUCATIONAL:        "Educational institution — universities and schools often commission art for campus buildings.",
-    OccupancyType.MIXED_USE:          "Mixed-use development with public-facing spaces.",
-    OccupancyType.RESIDENTIAL_MULTI:  "Multi-family residential — qualifies under PADFP for apartment developments.",
-    OccupancyType.COMMERCIAL:         None,
-    OccupancyType.OTHER:              None,
-    OccupancyType.INDUSTRIAL:         None,
-    OccupancyType.RESIDENTIAL_SINGLE: None,
+# Hard-cap occupancy types: these NEVER score above None
+_IRRELEVANT_OCCUPANCY = {
+    OccupancyType.RESIDENTIAL_SINGLE,
+    OccupancyType.INDUSTRIAL,
 }
 
-# Permit types carry timing signal: new construction is highest value because
-# art decisions happen earliest; demolition is irrelevant.
+# B. KEYWORD SIGNALS — expanded lists
+_HIGH_SIGNAL_KEYWORDS = [
+    "hotel", "lobby", "plaza", "atrium", "mezzanine",
+    "public open space", "popos", "amenity", "ground floor retail",
+    "mixed-use", "flagship", "headquarters", "campus",
+    "museum", "gallery", "theater", "theatre", "cultural", "library",
+    "university", "hospital", "civic", "terminal", "transit center",
+    "station", "waterfront", "landmark", "tower", "high-rise",
+]
+
+_LOW_SIGNAL_KEYWORDS = [
+    "warehouse", "distribution", "self-storage", "parking structure",
+    "parking garage", "gas station", "car wash", "cell tower", "antenna",
+    "tenant improvement", "interior only", "adu", "accessory dwelling unit",
+    "single family", "sfr", "duplex", "mini storage", "utility",
+    "senior care", "assisted living", "nursing",
+    "fast food", "drive-through", "drive through", "billboard",
+    "auto repair",
+]
+
+# Never-art keywords -> _is_irrelevant returns True
+_NEVER_ART_KEYWORDS = [
+    "self-storage", "storage facility", "car wash", "gas station",
+    "auto repair", "drive-through", "drive through",
+]
+
+# C. PERMIT TYPE WEIGHT
 _TYPE_WEIGHT: dict[PermitType, int] = {
-    PermitType.NEW_CONSTRUCTION: 3,
-    PermitType.ADDITION:         2,
-    PermitType.MAJOR_RENOVATION: 2,
-    PermitType.OTHER:            1,
+    PermitType.NEW_CONSTRUCTION: 2,
+    PermitType.ADDITION:         1,
+    PermitType.MAJOR_RENOVATION: 1,
+    PermitType.OTHER:            0,
     PermitType.DEMOLITION:       0,
 }
 
-# Permit statuses: earlier pipeline = higher value for outreach timing.
+# D. STATUS WEIGHT
 _STATUS_WEIGHT: dict[PermitStatus, int] = {
-    PermitStatus.UNDER_REVIEW: 3,   # earliest signal
-    PermitStatus.APPROVED:     3,   # about to start
-    PermitStatus.ISSUED:       2,   # construction beginning
-    PermitStatus.FINAL:        1,   # late stage, still possible
-    PermitStatus.SUBMITTED:    3,
+    PermitStatus.UNDER_REVIEW: 1,
+    PermitStatus.SUBMITTED:    1,
+    PermitStatus.APPROVED:     1,
+    PermitStatus.ISSUED:       1,
+    PermitStatus.FINAL:        0,
     PermitStatus.EXPIRED:      0,
 }
 
-# Valuation bands: raw threshold → weight
-_VALUATION_BANDS = [
-    (50_000_000, 4),   # $50M+
-    (20_000_000, 3),   # $20M–$50M
-    (10_000_000, 2),   # $10M–$20M
-    (5_000_000,  1),   # $5M–$10M
-    (0,          0),   # below $5M
-]
+# E. VALUATION THRESHOLDS
+_VALUATION_NONE_FLOOR = 2_000_000         # below this, no relevance
+_VALUATION_MEDIUM_FLOOR = 10_000_000      # general commercial
+_VALUATION_HIGH_FLOOR = 25_000_000        # general high
+_VALUATION_HOTEL_HIGH_FLOOR = 15_000_000  # hotels + cultural
+_VALUATION_PUBLIC_HIGH_FLOOR = 5_000_000  # strong-ordinance public
+_VALUATION_LANDMARK = 50_000_000          # auto-qualifies for High consideration
 
-# Score thresholds → RelevanceLevel
-_HIGH_THRESHOLD   = 9   # ordinance triggered + strong occupancy + high valuation
-_MEDIUM_THRESHOLD = 5   # ordinance triggered or strong occupancy with decent valuation
+# F. SCORE THRESHOLDS for relevance levels
+_HIGH_THRESHOLD = 6
+_MEDIUM_THRESHOLD = 3
 
-# Minimum valuation required for HIGH relevance when no ordinance triggered.
-# Without a formal percent-for-art requirement, voluntary art commissioning is
-# only plausible at a meaningful project scale.
-_HIGH_NO_ORDINANCE_MIN_VALUATION = 5_000_000
-
-# COMMERCIAL permits need more than the ordinance trigger to reach HIGH.
-# Generic office TIs and retail buildouts trigger PADFP but rarely commission art.
-# Require keyword venue signals (hotel, museum, lobby, etc.) OR $20M+ scale.
-_COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS = 20_000_000
-
-
-# ── Keyword signals ───────────────────────────────────────────────────────────
-
-# Work description keywords that signal likely art commissioning contexts.
-_HIGH_SIGNAL_KEYWORDS = [
-    "hotel", "museum", "library", "cultural center", "transit station",
-    "mixed-use", "plaza", "lobby", "gallery", "theater", "theatre",
-    "university", "hospital", "civic center", "community center",
-    "performing arts", "concert hall", "arena", "park",
-]
-
-# Work description keywords that signal the project is unlikely art territory.
-# Each match applies a -7 penalty (uncapped).
-# A typical commercial new construction (under review, $10M) has a base score of
-# 3+3+3+2=11. A single -7 penalty drops score to 4, below the MEDIUM threshold
-# of 5 — making these projects ordinance-dependent when PADFP triggers, and
-# scoring LOW/None on their own merits.
-_LOW_SIGNAL_KEYWORDS = [
-    "warehouse", "parking structure", "parking garage",
-    "senior care", "assisted living", "nursing",
-    "auto repair", "car wash", "gas station", "fast food",
-    "drive-through", "drive through",
-    "cell tower", "billboard", "antenna",
-]
-
-# Project types where art commissioning is implausible regardless of scale or ordinance.
-# These trigger _is_irrelevant → NONE, keeping them out of the feed entirely.
-_NEVER_ART_KEYWORDS = [
-    "self-storage", "storage facility",
-    "car wash", "gas station", "auto repair",
-    "drive-through", "drive through",
-]
-
-# Square footage bands: (minimum_sqft, score_weight)
-# Larger developments are better art commissioning targets at scale.
+# Square footage bands
 _SQ_FT_BANDS = [
-    (200_000, 2),   # major development
-    (50_000,  1),   # significant development
-    (5_000,   0),   # mid-range: neutral
-    (0,      -1),   # small project: penalty
+    (200_000, 2),
+    (50_000,  1),
+    (5_000,   0),
+    (0,      -1),
 ]
 
-
-# ── Ordinance matching ────────────────────────────────────────────────────────
-
-# Maps occupancy_type enum values to the project_types strings used in the
-# ordinance JSON. This is the only coupling between engine and ordinance data format.
+# Occupancy -> ordinance project types mapping
 _OCCUPANCY_TO_ORDINANCE_TYPES: dict[OccupancyType, list[str]] = {
     OccupancyType.COMMERCIAL:         ["Commercial", "Office", "Hotel"],
     OccupancyType.RESIDENTIAL_MULTI:  ["Apartment", "Mixed-Use"],
     OccupancyType.MIXED_USE:          ["Mixed-Use", "Commercial"],
     OccupancyType.CIVIC:              ["Public Capital Projects"],
-    OccupancyType.EDUCATIONAL:        ["Commercial"],  # schools rarely private dev
+    OccupancyType.EDUCATIONAL:        ["Commercial"],
     OccupancyType.INDUSTRIAL:         ["Industrial"],
     OccupancyType.RESIDENTIAL_SINGLE: [],
     OccupancyType.OTHER:              ["Commercial"],
 }
 
 
-# ── Keyword and square-footage helpers ───────────────────────────────────────
+# ── Keyword and owner helpers ────────────────────────────────────────────────
 
 def _keyword_score(description: str) -> tuple[int, list[str]]:
     """
     Scan work description for art-commissioning signal keywords.
     Returns (score_delta, matched_high_signal_keywords).
-
-    High-signal keywords: +1 each, capped at +2 total.
-    Low-signal keywords:  -5 each, uncapped — strong enough that a single
-      match makes most standard commercial permits ordinance-dependent
-      (score without ordinance drops below the MEDIUM threshold of 5).
-
-    Uses word-boundary matching so "park" doesn't match "parking",
-    "theater" matches "theaters", etc.
+    High-signal: +1 each, capped at +3.
+    Low-signal: -2 each, uncapped.
     """
     if not description:
         return 0, []
@@ -188,15 +168,66 @@ def _keyword_score(description: str) -> tuple[int, list[str]]:
             high_delta += 1
     for kw in _LOW_SIGNAL_KEYWORDS:
         if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
-            low_delta -= 7
-    return min(2, high_delta) + low_delta, matched
+            low_delta -= 2
+    return min(3, high_delta) + low_delta, matched
+
+
+def _is_hotel_keyword(description: str) -> bool:
+    """Check if description mentions hotel."""
+    if not description:
+        return False
+    return bool(re.search(r"\bhotel\b", description.lower()))
+
+
+def _owner_score(permit: CanonicalPermit) -> tuple[int, list[str], bool]:
+    """
+    Score based on owner/applicant name matching against known patterns.
+    Returns (score_delta, reasons, is_hotel_owner).
+    """
+    candidate = " ".join(
+        part for part in [permit.owner_name, permit.applicant_name] if part
+    ).lower()
+    if not candidate:
+        return 0, [], False
+
+    score = 0
+    reasons: list[str] = []
+    is_hotel_owner = False
+
+    # Major developer match
+    for pattern in _OWNER_PATTERNS.get("developer_patterns", []):
+        if pattern.lower() in candidate:
+            score += 2
+            reasons.append(f"Major developer ({pattern.title()}) — track record of commissioning art.")
+            break
+
+    # Hotel brand match
+    for pattern in _OWNER_PATTERNS.get("hotel_brand_patterns", []):
+        if pattern.lower() in candidate:
+            score += 2
+            is_hotel_owner = True
+            reasons.append(f"Hotel brand ({pattern.title()}) — hotels are strong art commissioning typology.")
+            break
+
+    # Tech company match
+    for pattern in _OWNER_PATTERNS.get("tech_company_patterns", []):
+        if pattern.lower() in candidate:
+            score += 1
+            reasons.append(f"Major tech company ({pattern.title()}) — campus/HQ projects often include art programs.")
+            break
+
+    # Cultural institution match
+    for kw in _OWNER_PATTERNS.get("cultural_keywords", []):
+        if kw.lower() in candidate:
+            score += 1
+            reasons.append("Cultural institution owner — strong art commissioning tradition.")
+            break
+
+    return score, reasons, is_hotel_owner
 
 
 def _sqft_score(raw_data: dict) -> tuple[int, Optional[str]]:
-    """
-    Score based on square footage when available in raw permit data.
-    Returns (score_delta, reason_string_or_None).
-    """
+    """Score based on square footage when available."""
     raw = (
         raw_data.get("square_footage")
         or raw_data.get("sqft")
@@ -220,12 +251,9 @@ def _sqft_score(raw_data: dict) -> tuple[int, Optional[str]]:
 
 
 def _outreach_timing(permit: CanonicalPermit) -> str:
-    """
-    Translate permit status into language that tells Tre when to act,
-    not where the permit is in a bureaucratic process.
-    """
-    # "Ready to Issue" is canonical APPROVED but warrants special urgency.
-    raw_status = permit.raw_data.get("status_desc", "")
+    """Translate permit status into outreach timing language."""
+    raw_status = (permit.raw_data.get("status_desc") or
+                  permit.raw_data.get("status") or "")
     if raw_status == "Ready to Issue":
         return "Act now — permit imminent"
     if permit.permit_status in (PermitStatus.UNDER_REVIEW, PermitStatus.SUBMITTED):
@@ -234,16 +262,16 @@ def _outreach_timing(permit: CanonicalPermit) -> str:
         return "Mid — approved, pre-construction"
     if permit.permit_status in (PermitStatus.ISSUED, PermitStatus.FINAL):
         return "Late — construction may have started"
-    return "Early — in plan review"  # safe default
+    return "Early — in plan review"
 
 
-# ── Output types ──────────────────────────────────────────────────────────────
+# ── Output types ─────────────────────────────────────────────────────────────
 
 class RelevanceLevel(str, Enum):
     HIGH   = "High"
     MEDIUM = "Medium"
     LOW    = "Low"
-    NONE   = "None"    # permit is irrelevant (demolition, expired, single-family, etc.)
+    NONE   = "None"
 
 
 @dataclass
@@ -252,38 +280,29 @@ class OrdMatchResult:
     triggered: bool
     ordinance_name: str
     ordinance_percentage: float
-    art_budget_low: Optional[float]   # ordinance % × valuation × 0.8 (conservative)
-    art_budget_high: Optional[float]  # ordinance % × valuation × 1.2 (optimistic)
-    reason: str                       # human-readable explanation
+    art_budget_low: Optional[float]
+    art_budget_high: Optional[float]
+    reason: str
+    practical_strength: str = "strong"   # "strong" or "weak"
 
 
 @dataclass
 class ScoredPermit:
-    """
-    A CanonicalPermit enriched with art commissioning intelligence.
-    The original permit is preserved unchanged; scoring fields are additive.
-    """
+    """A CanonicalPermit enriched with art commissioning intelligence."""
     permit: CanonicalPermit
-
-    # Ordinance match
     ordinance_triggered: bool
-    ordinance_dependent: bool                # True when the ordinance is load-bearing for H/M status
-    ordinance_name: Optional[str]            # name of the triggered ordinance, if any
-    ordinance_match_reason: str              # why it does/doesn't trigger
-
-    # Art budget estimate
-    art_budget_low: Optional[float]          # lower bound in USD
-    art_budget_high: Optional[float]         # upper bound in USD
-    art_budget_display: str                  # formatted range, e.g. "$80K–$120K"
-    budget_basis: str                        # one-sentence derivation
-
-    # Relevance
+    ordinance_dependent: bool
+    ordinance_name: Optional[str]
+    ordinance_match_reason: str
+    art_budget_low: Optional[float]
+    art_budget_high: Optional[float]
+    art_budget_display: str
+    budget_basis: str
     relevance: RelevanceLevel
-    relevance_reasons: list[str]             # bullet points explaining the score
-
-    # Enrichment
-    opportunity_stage: str                   # outreach timing language for Tre
-    keyword_signals: list[str]               # high-signal keywords found in work_desc
+    relevance_reasons: list[str]
+    opportunity_stage: str
+    keyword_signals: list[str]
+    scoring_factors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = self.permit.to_dict()
@@ -297,17 +316,14 @@ class ScoredPermit:
             "relevance_reasons":    self.relevance_reasons,
             "opportunity_stage":    self.opportunity_stage,
             "keyword_signals":      self.keyword_signals,
+            "scoring_factors":      self.scoring_factors,
         })
         return d
 
 
-# ── Ordinance loader ──────────────────────────────────────────────────────────
+# ── Ordinance loader ─────────────────────────────────────────────────────────
 
 def load_ordinances(path: Optional[str] = None) -> list[dict]:
-    """
-    Load percent-for-art ordinance data from the JSON file.
-    Returns the raw list of ordinance dicts — the engine consumes this directly.
-    """
     if path is None:
         path = os.path.join(
             os.path.dirname(__file__),
@@ -317,94 +333,50 @@ def load_ordinances(path: Optional[str] = None) -> list[dict]:
         return json.load(f)
 
 
-# ── Core scoring function ─────────────────────────────────────────────────────
+# ── Core scoring ─────────────────────────────────────────────────────────────
 
 def score_permit(
     permit: CanonicalPermit,
     ordinances: list[dict],
 ) -> ScoredPermit:
-    """
-    Score a single CanonicalPermit for art commissioning relevance.
+    """Score a single CanonicalPermit for art commissioning relevance."""
 
-    Steps:
-      1. Check all ordinances for city/state match and project eligibility.
-      2. If an ordinance triggers, compute the art budget estimate.
-      3. Compute a composite relevance score from ordinance match, occupancy
-         type, permit type, status, and valuation.
-      4. Return a ScoredPermit with all scoring fields populated.
-    """
-    # ── Step 1: ordinance matching ────────────────────────────────────────────
+    # Step 1: irrelevance check
+    if _is_irrelevant(permit):
+        ord_result = _match_ordinances(permit, ordinances)
+        budget_display, budget_basis = _format_budget(permit, ord_result)
+        return ScoredPermit(
+            permit=permit,
+            ordinance_triggered=ord_result.triggered,
+            ordinance_dependent=False,
+            ordinance_name=ord_result.ordinance_name if ord_result.triggered else None,
+            ordinance_match_reason=ord_result.reason,
+            art_budget_low=ord_result.art_budget_low,
+            art_budget_high=ord_result.art_budget_high,
+            art_budget_display=budget_display,
+            budget_basis=budget_basis,
+            relevance=RelevanceLevel.NONE,
+            relevance_reasons=["Project type or status does not support art commissioning."],
+            opportunity_stage=_outreach_timing(permit),
+            keyword_signals=[],
+            scoring_factors=["irrelevant_typology"],
+        )
+
+    # Step 2: ordinance matching
     ord_result = _match_ordinances(permit, ordinances)
 
-    # ── Step 2: compute relevance score ──────────────────────────────────────
-    score, reasons, keyword_signals = _compute_score(permit, ord_result)
+    # Step 3: compute multi-factor score
+    score, reasons, keyword_signals, scoring_factors = _compute_score(permit, ord_result)
 
-    # ── Step 3: map score to RelevanceLevel ───────────────────────────────────
-    # Immediately disqualify cases where art commissioning is implausible.
-    if _is_irrelevant(permit):
-        relevance = RelevanceLevel.NONE
-        reasons = ["Project type or status does not support art commissioning."]
-    elif score >= _HIGH_THRESHOLD:
-        # Floor 1: without an ordinance trigger, require $5M+ for HIGH.
-        # Category weights alone (occupancy + type + status) can sum to 9 on a
-        # $300K tenant improvement — that's not a project Tre would pursue.
-        if not ord_result.triggered and (permit.valuation or 0) < _HIGH_NO_ORDINANCE_MIN_VALUATION:
-            relevance = RelevanceLevel.MEDIUM
-            val_str = f"${permit.valuation:,.0f}" if permit.valuation is not None else "unknown"
-            reasons.append(
-                f"Capped at Medium: no ordinance triggered and valuation "
-                f"{val_str} is below the "
-                f"${_HIGH_NO_ORDINANCE_MIN_VALUATION:,.0f} floor for High relevance "
-                f"without an ordinance requirement."
-            )
-        # Floor 2: generic COMMERCIAL without venue signals.
-        # The PADFP trigger alone covers every office TI and retail buildout over
-        # $500K — that's too broad. Require keyword venue signals (hotel, museum,
-        # lobby, etc.) OR $20M+ scale before surfacing as a High opportunity.
-        elif (
-            permit.occupancy_type == OccupancyType.COMMERCIAL
-            and not keyword_signals
-            and (permit.valuation or 0) < _COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS
-        ):
-            relevance = RelevanceLevel.MEDIUM
-            reasons.append(
-                f"Capped at Medium: commercial project with no specific venue signals "
-                f"(hotel, museum, lobby, etc.). Reaches High at "
-                f"${_COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS // 1_000_000}M+ "
-                f"or when work description names a specific program type."
-            )
-        else:
-            relevance = RelevanceLevel.HIGH
-    elif score >= _MEDIUM_THRESHOLD:
-        relevance = RelevanceLevel.MEDIUM
-    else:
-        relevance = RelevanceLevel.LOW
+    # Step 4: determine relevance level with valuation floors
+    relevance = _determine_relevance(permit, score, ord_result, keyword_signals)
 
-    # ── Step 4: ordinance dependency ─────────────────────────────────────────
-    # True when the ordinance bonus is load-bearing: without it (−6 pts) the
-    # permit would drop below its current relevance threshold.
-    # Also accounts for Floor 2: commercial without keywords would be capped at
-    # MEDIUM even if the raw score still clears HIGH.
-    if ord_result.triggered:
-        score_sans_ord = score - 6
-        commercial_floor_blocks = (
-            permit.occupancy_type == OccupancyType.COMMERCIAL
-            and not keyword_signals
-            and (permit.valuation or 0) < _COMMERCIAL_HIGH_MIN_VALUATION_WITHOUT_KEYWORDS
-        )
-        if relevance == RelevanceLevel.HIGH:
-            would_still_be_high = (
-                score_sans_ord >= _HIGH_THRESHOLD and not commercial_floor_blocks
-            )
-            ordinance_dependent = not would_still_be_high
-        elif relevance == RelevanceLevel.MEDIUM:
-            ordinance_dependent = score_sans_ord < _MEDIUM_THRESHOLD
-        else:
-            ordinance_dependent = False
-    else:
-        ordinance_dependent = False
+    # Step 5: ordinance dependency
+    ordinance_dependent = _compute_ordinance_dependent(
+        permit, ord_result, score, relevance, keyword_signals
+    )
 
-    # ── Step 5: budget display ────────────────────────────────────────────────
+    # Step 6: budget display
     budget_display, budget_basis = _format_budget(permit, ord_result)
 
     return ScoredPermit(
@@ -421,6 +393,7 @@ def score_permit(
         relevance_reasons=reasons,
         opportunity_stage=_outreach_timing(permit),
         keyword_signals=keyword_signals,
+        scoring_factors=scoring_factors,
     )
 
 
@@ -434,13 +407,229 @@ def score_permits(
     return [score_permit(p, ordinances) for p in permits]
 
 
-# ── Ordinance matching logic ──────────────────────────────────────────────────
+# ── Irrelevance check ────────────────────────────────────────────────────────
+
+def _is_irrelevant(permit: CanonicalPermit) -> bool:
+    """True for permits where art commissioning is implausible."""
+    if permit.permit_type == PermitType.DEMOLITION:
+        return True
+    if permit.permit_status == PermitStatus.EXPIRED:
+        return True
+    if permit.occupancy_type in _IRRELEVANT_OCCUPANCY:
+        return True
+    desc_lower = (permit.project_description or "").lower()
+    for kw in _NEVER_ART_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
+            return True
+    return False
+
+
+# ── Multi-factor scoring ─────────────────────────────────────────────────────
+
+def _compute_score(
+    permit: CanonicalPermit,
+    ord_result: OrdMatchResult,
+) -> tuple[int, list[str], list[str], list[str]]:
+    """
+    Compute composite score from typology, owner, keywords, ordinance, etc.
+    Returns (score, reasons, keyword_signals, scoring_factors).
+    """
+    score = 0
+    reasons: list[str] = []
+    scoring_factors: list[str] = []
+    keyword_signals: list[str] = []
+
+    # A. TYPOLOGY
+    is_hotel = _is_hotel_keyword(permit.project_description)
+    if is_hotel:
+        score += 3
+        reasons.append("Hotel project — strong typology for art commissioning regardless of ordinance status.")
+        scoring_factors.append("typology:hotel:+3")
+    else:
+        typology_bump = _TYPOLOGY_BUMP.get(permit.occupancy_type, 0)
+        if typology_bump > 0:
+            score += typology_bump
+            if permit.occupancy_type == OccupancyType.CIVIC:
+                reasons.append("Civic/public facility — strong art commissioning tradition.")
+            elif permit.occupancy_type == OccupancyType.EDUCATIONAL:
+                reasons.append("Educational institution — universities and schools often commission art.")
+            elif permit.occupancy_type == OccupancyType.MIXED_USE:
+                reasons.append("Mixed-use development with public-facing spaces.")
+            elif permit.occupancy_type == OccupancyType.COMMERCIAL:
+                reasons.append("Commercial project — art commissioning potential depends on scale and program.")
+            scoring_factors.append(f"typology:{permit.occupancy_type.value}:+{typology_bump}")
+
+    # B. OWNER TYPE
+    owner_delta, owner_reasons, is_hotel_owner = _owner_score(permit)
+    if owner_delta > 0:
+        score += owner_delta
+        reasons.extend(owner_reasons)
+        scoring_factors.append(f"owner:+{owner_delta}")
+        if is_hotel_owner and not is_hotel:
+            is_hotel = True
+            score += 2  # upgrade to hotel typology
+            scoring_factors.append("owner_hotel_upgrade:+2")
+
+    # Check public-sector owner for ordinance purposes
+    public_patterns = permit.raw_data.get("public_sector_owner_patterns", [])
+    is_public_owner = _matches_public_sector_owner(permit, public_patterns)
+    if is_public_owner:
+        score += 2
+        reasons.append("Public-sector owner — percent-for-art requirements likely apply.")
+        scoring_factors.append("owner:public_sector:+2")
+
+    # C. KEYWORD SIGNALS
+    kw_delta, matched_kws = _keyword_score(permit.project_description)
+    keyword_signals = matched_kws
+    score += kw_delta
+    if matched_kws:
+        reasons.append(f"Work description includes: {', '.join(matched_kws)}.")
+        scoring_factors.append(f"keywords:+{min(3, len(matched_kws))}")
+    if kw_delta < 0:
+        scoring_factors.append(f"negative_keywords:{kw_delta}")
+
+    # D. PERMIT TYPE
+    type_w = _TYPE_WEIGHT.get(permit.permit_type, 0)
+    score += type_w
+    if permit.permit_type == PermitType.NEW_CONSTRUCTION:
+        reasons.append("New construction — art decisions happen earliest in this phase.")
+        scoring_factors.append("permit_type:new:+2")
+    elif permit.permit_type in (PermitType.MAJOR_RENOVATION, PermitType.ADDITION):
+        reasons.append("Renovation or addition — art commissioning still possible.")
+        scoring_factors.append("permit_type:renovation:+1")
+
+    # E. STATUS
+    status_w = _STATUS_WEIGHT.get(permit.permit_status, 0)
+    score += status_w
+    if permit.permit_status == PermitStatus.FINAL:
+        reasons.append("Near completion — late stage, window may be closing.")
+    if status_w > 0:
+        scoring_factors.append(f"status:+{status_w}")
+
+    # F. SQUARE FOOTAGE
+    sqft_delta, sqft_reason = _sqft_score(permit.raw_data)
+    score += sqft_delta
+    if sqft_reason:
+        reasons.append(sqft_reason)
+        scoring_factors.append(f"sqft:{sqft_delta:+d}")
+
+    # G. ORDINANCE (softened — strong vs weak)
+    if ord_result.triggered:
+        if ord_result.practical_strength == "strong":
+            score += 2
+            reasons.append(
+                f"Subject to {ord_result.ordinance_name} — "
+                "percent-for-art requirement actively drives commissioning in this city."
+            )
+            scoring_factors.append("ordinance:strong:+2")
+        else:
+            score += 1
+            reasons.append(
+                f"Subject to {ord_result.ordinance_name} — "
+                "legal requirement exists but has historically driven few actual commissions."
+            )
+            scoring_factors.append("ordinance:weak:+1")
+
+    # H. VALUATION (modest contribution)
+    if permit.valuation:
+        if permit.valuation >= 50_000_000:
+            score += 2
+            reasons.append(
+                f"${permit.valuation/1_000_000:.0f}M valuation — "
+                "large-scale landmark project; trophy developments in this tier typically include public-facing art."
+            )
+            scoring_factors.append("valuation:landmark:+2")
+        elif permit.valuation >= 20_000_000:
+            score += 1
+            reasons.append(
+                f"${permit.valuation/1_000_000:.0f}M valuation — "
+                "large project, significant art budget likely."
+            )
+            scoring_factors.append("valuation:large:+1")
+        elif permit.valuation >= 10_000_000:
+            reasons.append(
+                f"${permit.valuation/1_000_000:.1f}M valuation — "
+                "mid-scale project."
+            )
+
+    return score, reasons, keyword_signals, scoring_factors
+
+
+def _determine_relevance(
+    permit: CanonicalPermit,
+    score: int,
+    ord_result: OrdMatchResult,
+    keyword_signals: list[str],
+) -> RelevanceLevel:
+    """Map composite score to relevance level with valuation floors."""
+    val = permit.valuation or 0
+
+    # Hard floor: below $2M is never relevant
+    if val < _VALUATION_NONE_FLOOR and val > 0:
+        return RelevanceLevel.NONE
+    if val == 0 and not ord_result.triggered:
+        # Unknown valuation without ordinance — cap at Medium
+        if score >= _MEDIUM_THRESHOLD:
+            return RelevanceLevel.MEDIUM
+        return RelevanceLevel.NONE
+
+    is_hotel = _is_hotel_keyword(permit.project_description)
+    is_strong_public = (
+        ord_result.triggered
+        and ord_result.practical_strength == "strong"
+    )
+
+    # HIGH determination
+    if score >= _HIGH_THRESHOLD:
+        # Apply valuation floors by typology
+        if is_strong_public and val >= _VALUATION_PUBLIC_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
+        if is_hotel and val >= _VALUATION_HOTEL_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
+        if permit.occupancy_type in (OccupancyType.CIVIC, OccupancyType.EDUCATIONAL):
+            if val >= _VALUATION_HOTEL_HIGH_FLOOR:
+                return RelevanceLevel.HIGH
+        if val >= _VALUATION_LANDMARK:
+            return RelevanceLevel.HIGH
+        if val >= _VALUATION_HIGH_FLOOR:
+            return RelevanceLevel.HIGH
+        # Score qualifies but valuation too low for High -> Medium
+        return RelevanceLevel.MEDIUM
+
+    # MEDIUM determination
+    if score >= _MEDIUM_THRESHOLD:
+        if val >= _VALUATION_NONE_FLOOR:
+            return RelevanceLevel.MEDIUM
+        return RelevanceLevel.NONE
+
+    return RelevanceLevel.NONE
+
+
+def _compute_ordinance_dependent(
+    permit: CanonicalPermit,
+    ord_result: OrdMatchResult,
+    score: int,
+    relevance: RelevanceLevel,
+    keyword_signals: list[str],
+) -> bool:
+    """True when removing the ordinance bonus would drop below current relevance."""
+    if not ord_result.triggered:
+        return False
+
+    ord_bonus = 2 if ord_result.practical_strength == "strong" else 1
+    score_sans_ord = score - ord_bonus
+
+    if relevance == RelevanceLevel.HIGH:
+        return score_sans_ord < _HIGH_THRESHOLD
+    if relevance == RelevanceLevel.MEDIUM:
+        return score_sans_ord < _MEDIUM_THRESHOLD
+    return False
+
+
+# ── Ordinance matching ───────────────────────────────────────────────────────
 
 def _match_ordinances(permit: CanonicalPermit, ordinances: list[dict]) -> OrdMatchResult:
-    """
-    Find the best-matching triggered ordinance for this permit.
-    Returns the first ordinance that triggers, or a non-triggered result.
-    """
+    """Find the best-matching triggered ordinance for this permit."""
     city_ordinances = [
         o for o in ordinances
         if o.get("city") == permit.city and o.get("state") == permit.state
@@ -456,12 +645,12 @@ def _match_ordinances(permit: CanonicalPermit, ordinances: list[dict]) -> OrdMat
             reason=f"No percent-for-art ordinance data for {permit.city}, {permit.state}.",
         )
 
-    for ord_data in city_ordinances:
+    # Prefer strong ordinances over weak ones
+    for ord_data in sorted(city_ordinances, key=lambda o: o.get("practical_strength", "strong") == "strong", reverse=True):
         result = _check_ordinance(permit, ord_data)
         if result.triggered:
             return result
 
-    # No ordinance triggered — return the last check's reason
     return _check_ordinance(permit, city_ordinances[0])
 
 
@@ -483,7 +672,8 @@ def _matches_public_sector_owner(permit: CanonicalPermit, patterns: list[str]) -
 def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
     """Check whether a single ordinance applies to this permit."""
     name = ord_data.get("ordinance_name", "Unknown Ordinance")
-    pct  = ord_data.get("percentage", 0.0)
+    pct = ord_data.get("percentage", 0.0)
+    strength = ord_data.get("practical_strength", "strong")
 
     # Valuation check
     threshold = ord_data.get("valuation_threshold")
@@ -496,6 +686,7 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
                 art_budget_low=None,
                 art_budget_high=None,
                 reason="Permit valuation unknown — cannot determine ordinance threshold.",
+                practical_strength=strength,
             )
         if permit.valuation < threshold:
             return OrdMatchResult(
@@ -508,9 +699,10 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
                     f"Valuation ${permit.valuation:,.0f} is below "
                     f"the ${threshold:,.0f} threshold for {name}."
                 ),
+                practical_strength=strength,
             )
 
-    # Project type check: does this permit's occupancy type match what the ordinance covers?
+    # Project type check
     applicable_types: list[str] = ord_data.get("project_types", [])
     occupancy_types_for_permit = _OCCUPANCY_TO_ORDINANCE_TYPES.get(
         permit.occupancy_type, []
@@ -532,6 +724,7 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
                     "Public sector owner/applicant not identified — "
                     f"{name} applies only to city or public authority projects."
                 ),
+                practical_strength=strength,
             )
 
     if not type_match and not public_owner_match:
@@ -544,10 +737,11 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
             reason=(
                 f"{permit.occupancy_type.value} projects do not trigger {name}."
             ),
+            practical_strength=strength,
         )
 
-    # Ordinance triggered — compute budget estimate
-    budget_low  = permit.valuation * pct * 0.8 if permit.valuation else None
+    # Triggered
+    budget_low = permit.valuation * pct * 0.8 if permit.valuation else None
     budget_high = permit.valuation * pct * 1.2 if permit.valuation else None
 
     return OrdMatchResult(
@@ -563,124 +757,24 @@ def _check_ordinance(permit: CanonicalPermit, ord_data: dict) -> OrdMatchResult:
         ) if threshold else (
             f"Triggers {name}: {pct*100:.0f}% applies to this project type."
         ),
+        practical_strength=strength,
     )
 
 
-# ── Relevance scoring ─────────────────────────────────────────────────────────
-
-def _is_irrelevant(permit: CanonicalPermit) -> bool:
-    """True for permits where art commissioning is implausible."""
-    if permit.permit_type == PermitType.DEMOLITION:
-        return True
-    if permit.permit_status == PermitStatus.EXPIRED:
-        return True
-    if permit.occupancy_type == OccupancyType.RESIDENTIAL_SINGLE:
-        return True
-    if permit.occupancy_type == OccupancyType.INDUSTRIAL:
-        return True
-    # Work descriptions naming project types that never involve art commissioning.
-    desc_lower = (permit.project_description or "").lower()
-    for kw in _NEVER_ART_KEYWORDS:
-        if re.search(r"\b" + re.escape(kw) + r"\b", desc_lower):
-            return True
-    return False
-
-
-def _compute_score(
-    permit: CanonicalPermit,
-    ord_result: OrdMatchResult,
-) -> tuple[int, list[str], list[str]]:
-    """
-    Compute a composite integer score, a list of plain-English reasons,
-    and a list of matched high-signal keywords.
-    Higher score is more relevant.
-
-    Reason order: ordinance → keywords → occupancy-specific → permit type
-                  → square footage → valuation
-    Status timing is scored but not added as a reason — the opportunity_stage
-    column already shows that in plain language.
-    """
-    score = 0
-    reasons: list[str] = []
-
-    # 1. Ordinance match (primary signal — 6-point bonus when triggered)
-    if ord_result.triggered:
-        score += 6
-        reasons.append(
-            f"Triggers {ord_result.ordinance_name} "
-            f"({ord_result.ordinance_percentage * 100:.0f}% of construction cost)."
-        )
-    # When not triggered, no reason added — the budget column shows "Est. 0.5–1.5%"
-    # which is enough context; the non-trigger message is just noise in this column.
-
-    # 2. Keyword signals (most differentiating — names the specific project signals)
-    kw_delta, matched_kws = _keyword_score(permit.project_description)
-    score += kw_delta
-    if matched_kws:
-        reasons.append(f"Work description includes: {', '.join(matched_kws)}.")
-
-    # 3. Occupancy type (specific language per type; COMMERCIAL relies on keywords)
-    occ_w = _OCCUPANCY_WEIGHT.get(permit.occupancy_type, 1)
-    score += occ_w
-    specific_occ_reason = _OCCUPANCY_SPECIFIC_REASONS.get(permit.occupancy_type)
-    if specific_occ_reason:
-        reasons.append(specific_occ_reason)
-    elif occ_w == 0:
-        reasons.append(
-            f"{permit.occupancy_type.value.replace('_', ' ').title()} — "
-            "low priority for art commissioning."
-        )
-
-    # 4. Permit type
-    type_w = _TYPE_WEIGHT.get(permit.permit_type, 1)
-    score += type_w
-    if permit.permit_type == PermitType.NEW_CONSTRUCTION:
-        reasons.append("New construction — art decisions happen earliest in this phase.")
-    elif permit.permit_type in (PermitType.MAJOR_RENOVATION, PermitType.ADDITION):
-        reasons.append("Renovation or addition — art commissioning still possible.")
-
-    # 5. Square footage
-    sqft_delta, sqft_reason = _sqft_score(permit.raw_data)
-    score += sqft_delta
-    if sqft_reason:
-        reasons.append(sqft_reason)
-
-    # 6. Status timing (score contribution only — opportunity_stage column owns the label)
-    status_w = _STATUS_WEIGHT.get(permit.permit_status, 1)
-    score += status_w
-    if permit.permit_status == PermitStatus.FINAL:
-        reasons.append("Near completion — late stage, window may be closing.")
-
-    # 7. Valuation
-    val_w = 0
-    for threshold, weight in _VALUATION_BANDS:
-        if permit.valuation and permit.valuation >= threshold:
-            val_w = weight
-            break
-    score += val_w
-    if permit.valuation and permit.valuation >= 20_000_000:
-        reasons.append(
-            f"${permit.valuation/1_000_000:.0f}M valuation — "
-            "large project, significant art budget likely."
-        )
-    elif permit.valuation and permit.valuation >= 5_000_000:
-        reasons.append(
-            f"${permit.valuation/1_000_000:.1f}M valuation — "
-            "mid-scale project, meaningful art budget possible."
-        )
-
-    return score, reasons, matched_kws
-
-
-# ── Budget formatting ─────────────────────────────────────────────────────────
+# ── Budget formatting ────────────────────────────────────────────────────────
 
 def _format_budget(
     permit: CanonicalPermit,
     ord_result: OrdMatchResult,
 ) -> tuple[str, str]:
     """Return (display_string, basis_sentence) for the art budget estimate."""
-    if ord_result.triggered and ord_result.art_budget_low is not None:
-        low  = ord_result.art_budget_low
+    # Strong ordinance: use actual rate
+    if (
+        ord_result.triggered
+        and ord_result.practical_strength == "strong"
+        and ord_result.art_budget_low is not None
+    ):
+        low = ord_result.art_budget_low
         high = ord_result.art_budget_high or low
         display = f"${_fmt_k(low)}–${_fmt_k(high)}"
         basis = (
@@ -690,9 +784,25 @@ def _format_budget(
         )
         return display, basis
 
-    # No ordinance — use a market-heuristic range (0.5%–1.5% of valuation)
+    # Weak ordinance: use heuristic, don't derive from ordinance rate
+    if (
+        ord_result.triggered
+        and ord_result.practical_strength == "weak"
+        and permit.valuation
+        and permit.valuation >= 5_000_000
+    ):
+        low = permit.valuation * 0.005
+        high = permit.valuation * 0.010
+        display = f"${_fmt_k(low)}–${_fmt_k(high)}"
+        basis = (
+            f"Approximately 0.5%–1% of valuation; {ord_result.ordinance_name} "
+            "applies but actual commissioning varies widely."
+        )
+        return display, basis
+
+    # No ordinance — heuristic range
     if permit.valuation and permit.valuation >= 5_000_000:
-        low  = permit.valuation * 0.005
+        low = permit.valuation * 0.005
         high = permit.valuation * 0.015
         display = f"${_fmt_k(low)}–${_fmt_k(high)}"
         basis = (
@@ -705,7 +815,7 @@ def _format_budget(
 
 
 def _fmt_k(value: float) -> str:
-    """Format a dollar value as a compact string: $1,250,000 → '1.25M', $75,000 → '75K'."""
+    """Format a dollar value compactly: $1,250,000 -> '1.2M', $75,000 -> '75K'."""
     if value >= 1_000_000:
         return f"{value / 1_000_000:.2g}M"
     if value >= 1_000:

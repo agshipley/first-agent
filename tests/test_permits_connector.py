@@ -547,3 +547,38 @@ class TestFetchRawAndNormalization:
         assert "Commercial" in where
         assert "status_desc in(" in where
         assert "submitted_date>='2025-01-01T00:00:00.000'" in where
+
+
+# ── SF Configuration ─────────────────────────────────────────────────────────
+
+class TestSFConfiguration:
+
+    def test_has_submitted_and_issued_datasets(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        assert "submitted" in SF_CONFIG.datasets
+        assert "issued" in SF_CONFIG.datasets
+
+    def test_city_state_jurisdiction(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        assert SF_CONFIG.city == "San Francisco"
+        assert SF_CONFIG.state == "CA"
+
+    def test_field_map_has_required_keys(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        required = ["permit_id", "project_description", "permit_type_raw", "permit_status_raw"]
+        for key in required:
+            assert key in SF_CONFIG.field_map, f"Missing {key}"
+
+    def test_single_dataset_both_roles(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        assert SF_CONFIG.datasets["submitted"].id == SF_CONFIG.datasets["issued"].id
+
+    def test_permit_type_map_covers_new_construction(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        assert "new construction" in SF_CONFIG.permit_type_map
+        assert SF_CONFIG.permit_type_map["new construction"] == "NEW_CONSTRUCTION"
+
+    def test_status_map_covers_key_statuses(self):
+        from permits.connectors.cities.san_francisco import SF_CONFIG
+        for status in ["filed", "approved", "issued", "complete", "expired"]:
+            assert status in SF_CONFIG.permit_status_map, f"Missing status: {status}"

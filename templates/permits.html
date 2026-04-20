@@ -577,6 +577,7 @@
                 <select id="citySelect" class="filter-select" onchange="setCity(this.value)">
                     <option value="los_angeles">Los Angeles</option>
                     <option value="new_york">New York</option>
+                    <option value="san_francisco">San Francisco</option>
                 </select>
             </div>
 
@@ -679,6 +680,12 @@
                 sourceLabel: 'NYC DOB via data.cityofnewyork.us',
                 sourceUrl: 'https://data.cityofnewyork.us',
                 sourceName: 'NYC DOB',
+            },
+            san_francisco: {
+                label: 'San Francisco',
+                sourceLabel: 'SF DBI via data.sfgov.org',
+                sourceUrl: 'https://data.sfgov.org',
+                sourceName: 'SF DBI',
             },
         };
 

@@ -1,0 +1,58 @@
+{
+  "developer_patterns": [
+    "tishman speyer",
+    "hines",
+    "boston properties",
+    "related companies",
+    "kilroy realty",
+    "jamestown",
+    "brookfield",
+    "oxford properties",
+    "rxr",
+    "silverstein",
+    "tishman realty"
+  ],
+  "hotel_brand_patterns": [
+    "hyatt",
+    "marriott",
+    "hilton",
+    "accor",
+    "four seasons",
+    "kimpton",
+    "proper",
+    "hoxton",
+    "standard hotel",
+    "ace hotel",
+    "1 hotel",
+    "rosewood",
+    "mandarin oriental",
+    "park hyatt",
+    "st. regis",
+    "st regis",
+    "ritz-carlton",
+    "ritz carlton",
+    "fairmont",
+    "montage",
+    "kempinski"
+  ],
+  "tech_company_patterns": [
+    "salesforce",
+    "stripe",
+    "meta platforms",
+    "google",
+    "apple",
+    "airbnb",
+    "openai",
+    "anthropic",
+    "nvidia"
+  ],
+  "cultural_keywords": [
+    "museum",
+    "gallery",
+    "foundation",
+    "cultural center",
+    "library",
+    "university",
+    "college"
+  ]
+}

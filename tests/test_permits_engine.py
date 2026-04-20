@@ -201,20 +201,18 @@ class TestOrdinanceMatching:
 class TestRelevanceScoring:
 
     def test_commercial_new_construction_large_is_high(self, la_ordinances):
+        # $50M+ commercial auto-qualifies via landmark tier
         permit = make_permit(
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
             occupancy_type=OccupancyType.COMMERCIAL,
-            valuation=20_000_000.0,
+            valuation=50_000_000.0,
         )
         result = score_permit(permit, la_ordinances)
         assert result.relevance == RelevanceLevel.HIGH
 
-    def test_commercial_below_padfp_threshold_caps_at_medium(self, la_ordinances):
-        # A $300K commercial new construction earns 9 category points but the
-        # ordinance doesn't trigger. The valuation floor ($5M) prevents HIGH
-        # when there's no ordinance requirement — small tenant improvements and
-        # minor retail buildouts are not Tre's market.
+    def test_commercial_below_valuation_floor_is_none(self, la_ordinances):
+        # $300K is below the $2M valuation floor — too small for art commissioning.
         permit = make_permit(
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
@@ -222,14 +220,13 @@ class TestRelevanceScoring:
             valuation=300_000.0,
         )
         result = score_permit(permit, la_ordinances)
-        assert result.relevance == RelevanceLevel.MEDIUM
-        assert result.ordinance_triggered is False
+        assert result.relevance == RelevanceLevel.NONE
 
-    def test_large_commercial_without_ordinance_trigger_still_scores_high(self, la_ordinances):
-        # A $20M+ commercial project with no ordinance still qualifies for HIGH —
-        # significant enough scale that voluntary art commissioning is plausible.
+    def test_large_commercial_without_ordinance_scores_medium(self, la_ordinances):
+        # $20M commercial with no ordinance and no keyword signals → Medium.
+        # Typology-primary scoring requires additional signals to reach High.
         permit = make_permit(
-            city="Somewhere", state="XX",   # no ordinance data for this city
+            city="Somewhere", state="XX",
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
             occupancy_type=OccupancyType.COMMERCIAL,
@@ -237,7 +234,7 @@ class TestRelevanceScoring:
         )
         result = score_permit(permit, la_ordinances)
         assert result.ordinance_triggered is False
-        assert result.relevance == RelevanceLevel.HIGH
+        assert result.relevance == RelevanceLevel.MEDIUM
 
     def test_commercial_10m_without_keywords_caps_at_medium(self, la_ordinances):
         # Commercial permits below $20M with no venue signals (hotel, museum,
@@ -253,14 +250,14 @@ class TestRelevanceScoring:
         assert result.ordinance_triggered is False
         assert result.relevance == RelevanceLevel.MEDIUM
 
-    def test_commercial_10m_with_keywords_scores_high(self, la_ordinances):
-        # Keyword signals (hotel, lobby, etc.) are sufficient for HIGH even below $20M.
+    def test_hotel_15m_with_keywords_scores_high(self, la_ordinances):
+        # Hotel typology + keywords reach High at $15M+ (hotel valuation floor).
         permit = make_permit(
             city="Somewhere", state="XX",
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
             occupancy_type=OccupancyType.COMMERCIAL,
-            valuation=10_000_000.0,
+            valuation=15_000_000.0,
             project_description="New boutique hotel with lobby and public plaza",
         )
         result = score_permit(permit, la_ordinances)
@@ -269,12 +266,12 @@ class TestRelevanceScoring:
         assert result.relevance == RelevanceLevel.HIGH
 
     def test_commercial_with_padfp_and_keywords_scores_high(self, la_ordinances):
-        # In LA: PADFP trigger + hotel keywords → clear HIGH
+        # In LA: PADFP trigger + hotel keywords → HIGH at hotel valuation floor
         permit = make_permit(
             permit_type=PermitType.NEW_CONSTRUCTION,
             permit_status=PermitStatus.UNDER_REVIEW,
             occupancy_type=OccupancyType.COMMERCIAL,
-            valuation=10_000_000.0,
+            valuation=15_000_000.0,
             project_description="New hotel with rooftop lobby and gallery",
         )
         result = score_permit(permit, la_ordinances)
@@ -441,6 +438,8 @@ class TestScorePermits:
         assert isinstance(d["relevance_reasons"], list)
         assert "opportunity_stage" in d
         assert "keyword_signals" in d
+        assert "scoring_factors" in d
+        assert isinstance(d["scoring_factors"], list)
 
     def test_to_dict_keyword_signals_is_list(self, la_ordinances):
         permit = make_permit(project_description="New hotel lobby and plaza")
@@ -488,11 +487,12 @@ class TestKeywordScore:
         assert delta == 0
         assert matched == []
 
-    def test_score_capped_at_plus_two(self):
-        # Pile in many high-signal keywords
+    def test_score_capped_at_plus_three(self):
+        # Pile in many high-signal keywords — capped at +3
         desc = "hotel lobby museum gallery theater plaza library cultural center university"
         delta, _ = _keyword_score(desc)
-        assert delta <= 2
+        assert delta <= 3
+        assert delta == 3  # should hit the cap
 
     def test_self_storage_scores_none_with_ordinance(self, la_ordinances):
         """Self-storage is NONE regardless of scale — caught by _is_irrelevant."""
@@ -541,16 +541,14 @@ class TestKeywordScore:
         assert result.relevance == RelevanceLevel.HIGH
         assert result.ordinance_dependent is False
 
-    def test_low_signal_penalty_is_strong_and_uncapped(self):
-        # Each low-signal keyword applies a -7 penalty with no cap.
-        # A single match should be enough to make a typical commercial permit
-        # score below the MEDIUM threshold (5) on its own merits.
+    def test_low_signal_penalty_is_meaningful_and_uncapped(self):
+        # Each low-signal keyword applies a -2 penalty, uncapped.
         delta_single, _ = _keyword_score("new senior care facility")
-        assert delta_single <= -7
+        assert delta_single <= -2
 
         # Multiple low-signal keywords compound
         delta_multi, _ = _keyword_score("warehouse parking structure auto repair")
-        assert delta_multi <= -14
+        assert delta_multi <= -4
 
     def test_high_signal_description_scores_higher_than_generic(self, la_ordinances):
         hotel = make_permit(
@@ -636,18 +634,26 @@ class TestOrdinanceDependent:
         assert result.ordinance_dependent is False
 
     def test_dependent_when_ordinance_is_load_bearing(self, la_ordinances):
-        # Residential multi-family, $600K, OTHER type, FINAL status, no keywords:
-        #   non-ordinance score = occ(1) + type(1) + status(1) + val(0) = 3 (< MEDIUM threshold 5)
-        #   with PADFP +6: score = 9 → HIGH
-        # Without ordinance this would be LOW → ordinance is load-bearing → dependent=True
+        # Residential multi-family, $5M, NEW_CONSTRUCTION, UNDER_REVIEW:
+        #   Without PADFP: typology(0) + type(2) + status(1) = 3 → MEDIUM at $5M
+        #   With PADFP weak(+1): 4 → still MEDIUM, but without it would drop to 3
+        #   which is still >= MEDIUM(3), so not dependent here.
+        # Use a weaker base to make it dependent:
+        #   RESIDENTIAL_MULTI, OTHER type, ISSUED: typology(0)+type(0)+status(1)=1
+        #   With weak PADFP(+1): 2 → still below MEDIUM. Need MEDIUM relevance.
+        # Better approach: RESIDENTIAL_MULTI, ADDITION, UNDER_REVIEW, $5M:
+        #   typology(0)+type(1)+status(1)=2 < MEDIUM(3)
+        #   With PADFP(+1): 3 → MEDIUM (at $5M >= $2M)
+        #   Without: 2 < 3 → NONE → dependent=True
         p = make_permit(
             occupancy_type=OccupancyType.RESIDENTIAL_MULTI,
-            permit_type=PermitType.OTHER,
-            permit_status=PermitStatus.FINAL,
-            valuation=600_000.0,
+            permit_type=PermitType.ADDITION,
+            permit_status=PermitStatus.UNDER_REVIEW,
+            valuation=5_000_000.0,
         )
         result = score_permit(p, la_ordinances)
         assert result.ordinance_triggered is True
+        assert result.relevance == RelevanceLevel.MEDIUM
         assert result.ordinance_dependent is True
 
     def test_not_dependent_when_permit_scores_high_on_own_merits(self, la_ordinances):
@@ -662,10 +668,13 @@ class TestOrdinanceDependent:
         assert result.ordinance_dependent is False  # keywords make it self-sufficient
 
     def test_civic_permit_not_dependent_on_ordinance(self, la_ordinances):
-        # CIVIC: occ=3 + type=3 + status=3 + val=2 = 11 → HIGH without any ordinance
+        # Civic $15M: typology(2)+type(2)+status(1)+ord(2)+val(0) = 7 → HIGH at $15M
+        # Without ordinance: 5 >= HIGH(6)? No, 5 < 6 → would be Medium.
+        # So at $15M civic IS dependent on strong ordinance for High.
+        # At $20M: typology(2)+type(2)+status(1)+val(1) = 6 >= HIGH → not dependent.
         p = make_permit(
             occupancy_type=OccupancyType.CIVIC,
-            valuation=10_000_000.0,
+            valuation=20_000_000.0,
         )
         result = score_permit(p, la_ordinances)
         assert result.ordinance_dependent is False
@@ -827,8 +836,8 @@ class TestRelevanceReasonDifferentiation:
         assert not any("Pre-issuance" in r for r in result.relevance_reasons)
         assert not any("early enough" in r for r in result.relevance_reasons)
 
-    def test_ordinance_trigger_appears_first_in_reasons(self, la_ordinances):
-        """When ordinance triggered, it should be the first reason."""
+    def test_ordinance_trigger_appears_in_reasons(self, la_ordinances):
+        """When ordinance triggered, it should appear in the reasons list."""
         p = make_permit(
             occupancy_type=OccupancyType.COMMERCIAL,
             valuation=10_000_000.0,
@@ -836,7 +845,7 @@ class TestRelevanceReasonDifferentiation:
         result = score_permit(p, la_ordinances)
         assert result.ordinance_triggered
         assert result.relevance_reasons, "Expected at least one reason"
-        assert "Triggers" in result.relevance_reasons[0]
+        assert any("Subject to" in r for r in result.relevance_reasons)
 
 
 # ── _fmt_k helper ─────────────────────────────────────────────────────────────
@@ -856,3 +865,192 @@ class TestFmtK:
         # The important properties: no crash, returns a string, contains a digit
         assert isinstance(result, str)
         assert any(c.isdigit() for c in result)
+
+
+# ── Typology-based scoring ──────────────────────────────────────────────────
+
+class TestTypologyScoring:
+
+    def test_hotel_scores_high_at_15m(self, la_ordinances):
+        p = make_permit(
+            project_description="New 200-room hotel with lobby and restaurant",
+            valuation=15_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.HIGH
+
+    def test_hotel_5m_scores_medium_not_high(self, la_ordinances):
+        p = make_permit(
+            project_description="New boutique hotel",
+            valuation=5_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.MEDIUM
+
+    def test_warehouse_is_none_regardless_of_valuation(self, la_ordinances):
+        p = make_permit(
+            occupancy_type=OccupancyType.INDUSTRIAL,
+            project_description="New warehouse facility",
+            valuation=50_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.NONE
+
+    def test_cultural_institution_high_at_15m(self, la_ordinances):
+        p = make_permit(
+            city="Somewhere", state="XX",
+            occupancy_type=OccupancyType.CIVIC,
+            project_description="New museum with gallery spaces",
+            valuation=15_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.HIGH
+
+    def test_landmark_50m_auto_qualifies_high(self, la_ordinances):
+        p = make_permit(
+            city="Somewhere", state="XX",
+            project_description="New commercial office tower",
+            valuation=50_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.HIGH
+
+    def test_below_2m_floor_is_none(self, la_ordinances):
+        p = make_permit(valuation=1_500_000.0)
+        result = score_permit(p, la_ordinances)
+        assert result.relevance == RelevanceLevel.NONE
+
+
+# ── Owner pattern matching ──────────────────────────────────────────────────
+
+class TestOwnerPatternScoring:
+
+    def test_major_developer_bumps_score(self, la_ordinances):
+        p = make_permit(
+            owner_name="Tishman Speyer Properties",
+            valuation=25_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert any("developer" in f.lower() or "owner" in f.lower() for f in result.scoring_factors)
+        assert result.relevance in (RelevanceLevel.HIGH, RelevanceLevel.MEDIUM)
+
+    def test_hotel_brand_triggers_hotel_typology(self, la_ordinances):
+        p = make_permit(
+            owner_name="Hyatt Hotels Corporation",
+            project_description="New commercial building",
+            valuation=15_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert any("hotel" in f.lower() for f in result.scoring_factors)
+
+    def test_public_sector_owner_bumps_score(self, la_ordinances):
+        from tests.conftest import make_permit as _mp
+        p = _mp(
+            city="New York", state="NY",
+            owner_name="NYC Department of Design and Construction",
+            valuation=10_000_000.0,
+            raw_data={"public_sector_owner_patterns": [
+                "DDC", "Department of Design and Construction",
+            ]},
+        )
+        result = score_permit(p, la_ordinances)
+        assert any("public_sector" in f for f in result.scoring_factors)
+
+
+# ── Weak ordinance treatment ────────────────────────────────────────────────
+
+class TestWeakOrdinanceTreatment:
+
+    def test_weak_ordinance_alone_does_not_push_to_high(self, la_ordinances):
+        """PADFP trigger alone without strong typology signals should not reach High."""
+        p = make_permit(
+            project_description="New commercial office building",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert result.relevance != RelevanceLevel.HIGH
+
+    def test_weak_ordinance_budget_uses_heuristic(self, la_ordinances):
+        """Weak-ordinance budget should NOT derive from ordinance rate."""
+        p = make_permit(
+            project_description="New commercial building",
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is True
+        # Budget basis should mention "varies" or "heuristic", not just the ordinance rate
+        assert "varies" in result.budget_basis.lower() or "approximately" in result.budget_basis.lower()
+
+    def test_strong_ordinance_uses_actual_rate(self, la_ordinances):
+        """Strong ordinance (Public Works) should derive budget from ordinance rate."""
+        p = make_permit(
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=20_000_000.0,
+        )
+        result = score_permit(p, la_ordinances)
+        assert result.ordinance_triggered is True
+        assert "Public Works" in result.budget_basis or "1%" in result.budget_basis
+
+    def test_scoring_factors_field_present(self, la_ordinances):
+        p = make_permit(valuation=10_000_000.0)
+        result = score_permit(p, la_ordinances)
+        d = result.to_dict()
+        assert "scoring_factors" in d
+        assert isinstance(d["scoring_factors"], list)
+        assert len(d["scoring_factors"]) > 0
+
+
+# ── SF ordinance matching ───────────────────────────────────────────────────
+
+class TestSFOrdinanceMatching:
+
+    @pytest.fixture
+    def all_ordinances(self):
+        return load_ordinances()
+
+    def test_sf_has_two_ordinances(self, all_ordinances):
+        sf_ords = [o for o in all_ordinances if o["city"] == "San Francisco"]
+        assert len(sf_ords) == 2
+
+    def test_sf_art_enrichment_is_strong(self, all_ordinances):
+        sf_ords = [o for o in all_ordinances if o["city"] == "San Francisco"]
+        enrichment = next(o for o in sf_ords if "Enrichment" in o["ordinance_name"])
+        assert enrichment["practical_strength"] == "strong"
+        assert enrichment["percentage"] == 0.02
+
+    def test_sf_section_429_is_weak(self, all_ordinances):
+        sf_ords = [o for o in all_ordinances if o["city"] == "San Francisco"]
+        s429 = next(o for o in sf_ords if "429" in o["ordinance_name"])
+        assert s429["practical_strength"] == "weak"
+        assert s429["percentage"] == 0.01
+
+    def test_sf_commercial_triggers_weak_ordinance(self, all_ordinances):
+        p = make_permit(
+            city="San Francisco", state="CA",
+            occupancy_type=OccupancyType.COMMERCIAL,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, all_ordinances)
+        assert result.ordinance_triggered is True
+        assert "429" in (result.ordinance_name or "")
+
+    def test_sf_civic_triggers_strong_ordinance(self, all_ordinances):
+        p = make_permit(
+            city="San Francisco", state="CA",
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, all_ordinances)
+        assert result.ordinance_triggered is True
+        assert "Enrichment" in (result.ordinance_name or "")
+
+    def test_sf_strong_ordinance_uses_2_percent(self, all_ordinances):
+        p = make_permit(
+            city="San Francisco", state="CA",
+            occupancy_type=OccupancyType.CIVIC,
+            valuation=10_000_000.0,
+        )
+        result = score_permit(p, all_ordinances)
+        # 2% of $10M × 0.8 = $160K
+        assert result.art_budget_low == pytest.approx(10_000_000 * 0.02 * 0.8)

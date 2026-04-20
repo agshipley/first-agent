@@ -15,6 +15,7 @@ from flask import Blueprint, request, jsonify, render_template
 from permits.connectors.base import ConnectorFilters
 from permits.connectors.cities.los_angeles import la_connector
 from permits.connectors.cities.new_york import nyc_connector
+from permits.connectors.cities.san_francisco import sf_connector
 from permits.engine import score_permits, RelevanceLevel, _matches_public_sector_owner
 
 permits_bp = Blueprint("permits", __name__)
@@ -24,11 +25,13 @@ permits_bp = Blueprint("permits", __name__)
 _CONNECTORS = {
     "los_angeles": la_connector,
     "new_york": nyc_connector,
+    "san_francisco": sf_connector,
 }
 
 _SOURCE_LABELS = {
     "los_angeles": "LADBS via data.lacity.org",
     "new_york": "NYC DOB via data.cityofnewyork.us",
+    "san_francisco": "SF DBI via data.sfgov.org",
 }
 
 

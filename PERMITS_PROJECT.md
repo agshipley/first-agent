@@ -4,8 +4,8 @@
 
 **Project home:** `first-agent/permits/`
 **Parent repo:** `github.com/agshipley/first-agent` (private)
-**Status:** LA and NYC connectors live, city selector and sector filter implemented
-**Last updated:** April 15, 2026
+**Status:** LA, NYC, and SF connectors live. Typology-primary scoring engine (v2) deployed.
+**Last updated:** April 20, 2026
 
 ---
 
@@ -119,13 +119,15 @@ first-agent/
 │   │       ├── __init__.py
 │   │       ├── los_angeles.py      # LA-specific dataset IDs, field mappings
 │   │       ├── new_york.py         # NYC DOB NOW Build config (live)
-│   │       ├── chicago.py          # Chicago config (future)
+│   │       ├── san_francisco.py    # SF DBI config (live)
 │   │       └── ...
 │   ├── ordinances/
 │   │   ├── __init__.py
 │   │   └── data/
 │   │       ├── percent_for_art.json    # Per-city ordinance data
 │   │       └── README.md               # How to contribute ordinance data
+│   ├── scoring/
+│   │   └── owner_patterns.json        # Developer, hotel brand, tech, cultural patterns
 │   └── routes.py                   # Flask routes for the permits tab
 ├── templates/
 ├── static/
@@ -184,6 +186,31 @@ CanonicalPermit:
   fetched_at: datetime           # When this record was retrieved
 ```
 
+### Scoring Philosophy (v2)
+
+The scoring engine was rewritten in April 2026 to shift from ordinance-primary to typology-primary scoring, based on research showing that weak ordinances (LA PADFP, SF Section 429) are poor predictors of actual art commissioning.
+
+**Signal hierarchy (strongest to weakest):**
+
+1. **Typology** — Hotels (+3), cultural/educational/civic (+2), mixed-use/commercial (+1). Hotels almost always include art programs regardless of ordinance. Industrial, warehouse, single-family, self-storage are hard-capped at None.
+2. **Owner type** — Major developers (+2), hotel brands (+2), public-sector agencies (+2), tech companies (+1), cultural institutions (+1). Patterns stored in `permits/scoring/owner_patterns.json` — configurable without code changes.
+3. **Keywords** — High-signal (lobby, plaza, atrium, museum, etc.) +1 each capped at +3. Low-signal (warehouse, parking, tenant improvement, etc.) -2 each uncapped.
+4. **Ordinance** — Strong ordinances (LA Public Works, NYC DCLA, SF Art Enrichment) +2 with clear language. Weak ordinances (PADFP, Section 429) +1 with softer language noting historical underutilization.
+5. **Valuation** — $50M+ landmark tier +2, $20M+ large +1. Hard floor at $2M (below = None).
+
+**Valuation floors by typology:**
+- General commercial: $25M for High
+- Hotels and cultural: $15M for High
+- Strong-ordinance public sector: $5M for High
+- Landmark tier ($50M+): auto-qualifies for High consideration
+
+**Score thresholds:** HIGH >= 6, MEDIUM >= 3, else NONE.
+
+**Art budget calculation:**
+- Strong ordinance: derives from actual ordinance rate (1% or 2%)
+- Weak ordinance: uses heuristic (0.5%–1% of valuation, "actual commissioning varies")
+- No ordinance: uses heuristic (0.5%–1.5% of valuation)
+
 ### Percent-for-art ordinance data model
 
 ```
@@ -215,7 +242,7 @@ This data is maintained as a JSON file and updated manually. Ordinances change i
 |---|---|---|---|---|---|
 | Los Angeles | data.lacity.org | Socrata | Yes (PADFP) | 1 | Live — connector, ordinance, engine implemented |
 | New York | data.cityofnewyork.us | Socrata | Yes (NYCDCC) | 2 | Live — connector, ordinance, sector filter implemented |
-| San Francisco | datasf.org | Socrata | Yes | 3 | Not started |
+| San Francisco | data.sfgov.org | Socrata | Yes (2% Art Enrichment + Section 429) | 3 | Live — connector, two ordinances, sector filter |
 | Chicago | data.cityofchicago.org | Socrata | Yes | 4 | Not started |
 | Seattle | data.seattle.gov | Socrata | Yes | 5 | Not started |
 | Portland | TBD | TBD | Yes | 6 | Not started |
@@ -437,14 +464,20 @@ The `valuation` field is stored as **text** in both datasets. Rules:
 - [x] Public-sector owner pattern matching for NYC ordinance eligibility
 - [x] Dynamic UI labels (city name, data source, freshness) per selected city
 
+- [x] SF DBI connector (single dataset: p4e4-a5a7, status-based filtering)
+- [x] SF percent-for-art ordinance data (2% Art Enrichment strong, Section 429 weak)
+- [x] Scoring engine v2 — typology-primary, owner signals, softened ordinance weighting
+- [x] Owner pattern matching from configurable JSON (permits/scoring/owner_patterns.json)
+- [x] practical_strength field on ordinances (strong/weak)
+- [x] scoring_factors field on ScoredPermit for debuggability
+
 ### In progress
 
 *(Nothing currently in progress.)*
 
 ### Next
-- [ ] Confirm Socrata availability for SF, Chicago, Seattle
+- [ ] Confirm Socrata availability for Chicago, Seattle
 - [ ] Add connector configs for next 2–3 cities
-- [ ] Input validation hardening (date_from, numeric params)
 - [ ] Update PERMITS_PROJECT.md expansion table as cities are confirmed
 
 ### Deferred
