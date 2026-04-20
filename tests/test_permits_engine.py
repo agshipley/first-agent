@@ -857,7 +857,7 @@ class TestFmtK:
         (100_000.0,      "100K"),
         (1_000_000.0,    "1M"),
         (1_250_000.0,    "1.2M"),
-        (50_000_000.0,   "5e+07"),   # scientific notation at this scale via :.2g
+        (50_000_000.0,   "50M"),
         (500.0,          "500"),
     ])
     def test_fmt_k_output(self, value, expected):

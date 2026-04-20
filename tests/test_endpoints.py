@@ -638,9 +638,17 @@ class TestDeepDiveSaveEndpoint:
         data = resp.get_json()
         assert "error" in data
 
-    def test_save_with_invalid_report_id_returns_404(self, client):
+    def test_save_with_invalid_format_report_id_returns_400(self, client):
         resp = client.post("/deep-dive/save",
                            data=json.dumps({"report_id": "nonexistent-id"}),
+                           content_type="application/json")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_save_with_nonexistent_report_id_returns_404(self, client):
+        resp = client.post("/deep-dive/save",
+                           data=json.dumps({"report_id": str(uuid.uuid4())}),
                            content_type="application/json")
         assert resp.status_code == 404
         data = resp.get_json()

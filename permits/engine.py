@@ -450,10 +450,10 @@ def score_permit(
     ord_result = _match_ordinances(permit, ordinances)
 
     # Step 3: compute multi-factor score
-    score, reasons, keyword_signals, scoring_factors = _compute_score(permit, ord_result)
+    score, reasons, keyword_signals, scoring_factors, typology_flags = _compute_score(permit, ord_result)
 
     # Step 4: determine relevance level with valuation floors
-    relevance = _determine_relevance(permit, score, ord_result, keyword_signals)
+    relevance = _determine_relevance(permit, score, ord_result, keyword_signals, typology_flags)
 
     # Step 5: ordinance dependency
     ordinance_dependent = _compute_ordinance_dependent(
@@ -656,7 +656,13 @@ def _compute_score(
                 "mid-scale project."
             )
 
-    return score, reasons, keyword_signals, scoring_factors
+    typology_flags = {
+        "is_hotel": is_hotel,
+        "is_airport": is_airport,
+        "is_lifesci": is_lifesci,
+        "is_healthcare": is_healthcare,
+    }
+    return score, reasons, keyword_signals, scoring_factors, typology_flags
 
 
 def _determine_relevance(
@@ -664,6 +670,7 @@ def _determine_relevance(
     score: int,
     ord_result: OrdMatchResult,
     keyword_signals: list[str],
+    typology_flags: dict = None,
 ) -> RelevanceLevel:
     """Map composite score to relevance level with valuation floors."""
     val = permit.valuation or 0
@@ -677,10 +684,11 @@ def _determine_relevance(
             return RelevanceLevel.MEDIUM
         return RelevanceLevel.NONE
 
-    is_hotel = _is_hotel_keyword(permit.project_description)
-    is_airport = _is_airport_transit(permit)
-    is_lifesci = _is_life_sciences(permit)
-    is_healthcare = _is_healthcare(permit)
+    flags = typology_flags or {}
+    is_hotel = flags.get("is_hotel", False)
+    is_airport = flags.get("is_airport", False)
+    is_lifesci = flags.get("is_lifesci", False)
+    is_healthcare = flags.get("is_healthcare", False)
     is_strong_public = (
         ord_result.triggered
         and ord_result.practical_strength == "strong"
@@ -930,7 +938,10 @@ def _format_budget(
 def _fmt_k(value: float) -> str:
     """Format a dollar value compactly: $1,250,000 -> '1.2M', $75,000 -> '75K'."""
     if value >= 1_000_000:
-        return f"{value / 1_000_000:.2g}M"
+        m = value / 1_000_000
+        if m == int(m):
+            return f"{int(m)}M"
+        return f"{m:.1f}M"
     if value >= 1_000:
         return f"{value / 1_000:.0f}K"
     return f"{value:.0f}"

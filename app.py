@@ -1,4 +1,5 @@
 import anthropic
+import re
 import threading
 import time
 import uuid
@@ -19,11 +20,21 @@ from permits.routes import permits_bp
 load_dotenv()
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max request size
 app.register_blueprint(permits_bp)
 
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
+
+# ── Input validation ─────────────────────────────────────────────────────────
+
+_VALID_SEGMENTS = {"corporate", "public_sector"}
+_VALID_GEOGRAPHIES = {
+    "Greater Los Angeles Area", "San Francisco", "Portland", "Seattle",
+    "Chicago", "New York", "Washington D.C.", "Boston", "Dallas",
+    "Houston", "New Orleans",
+}
 
 # ── Lead search tools ─────────────────────────────────────────────────────────
 
@@ -252,11 +263,15 @@ def leads():
 @app.route("/run", methods=["GET", "POST"])
 def run():
     segment = request.args.get("segment") or request.form.get("segment", "corporate")
+    if segment not in _VALID_SEGMENTS:
+        segment = "corporate"
     geography = request.args.get("geography") or request.form.get("geography", "Greater Los Angeles Area")
+    if geography not in _VALID_GEOGRAPHIES:
+        geography = "Greater Los Angeles Area"
     budget = request.args.get("budget") or request.form.get("budget", "Any Budget")
     project_stage = request.args.get("project_stage") or request.form.get("project_stage", "All Stages")
-    permit_address = request.args.get("permit_address", "").strip()
-    permit_description = request.args.get("permit_description", "").strip()
+    permit_address = request.args.get("permit_address", "").strip()[:200]
+    permit_description = request.args.get("permit_description", "").strip()[:500]
 
     def generate():
         client = anthropic.Anthropic()
@@ -511,9 +526,13 @@ def list_reports():
     return jsonify(reports)
 
 
+_UUID_RE = re.compile(r"^[a-f0-9\-]{36}$")
+
+
 @app.route("/api/reports/<report_id>", methods=["GET"])
 def get_report(report_id):
-    # Sanitise the report_id to prevent path traversal
+    if not _UUID_RE.match(report_id):
+        return jsonify({"error": "Invalid report ID format"}), 400
     safe_id = os.path.basename(report_id)
     report_path = os.path.join(REPORTS_DIR, f"{safe_id}.json")
     if not os.path.exists(report_path):
@@ -528,6 +547,8 @@ def deep_dive_save():
     report_id = data.get("report_id", "")
     if not report_id:
         return jsonify({"error": "report_id is required"}), 400
+    if not _UUID_RE.match(report_id):
+        return jsonify({"error": "Invalid report ID format"}), 400
 
     safe_id = os.path.basename(report_id)
     report_path = os.path.join(REPORTS_DIR, f"{safe_id}.json")

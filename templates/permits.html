@@ -945,15 +945,6 @@
             } catch { return dateStr; }
         }
 
-        function sendToLeadSearch(address) {
-            navigator.clipboard.writeText(address).then(() => {
-                showToast('"' + address + '" copied — opening Lead Finder');
-                setTimeout(() => { window.open('/', '_blank'); }, 600);
-            }).catch(() => {
-                showToast('Opening Lead Finder');
-                window.open('/', '_blank');
-            });
-        }
 
         function showToast(msg) {
             const t = document.getElementById('toast');
@@ -968,7 +959,8 @@
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         // ── Tooltip interaction (mobile tap support) ──��───────────────────────
