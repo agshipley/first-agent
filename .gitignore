@@ -1,6 +1,7 @@
 .env
 .venv
 leads.xlsx
+regulations.db
 __pycache__
 .DS_Store
 test_formatting.py

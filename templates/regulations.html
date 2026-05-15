@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regulations — Tre Borden /Co</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    background: #f5f5f4;
+    color: #1c1917;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #1c1917;
+    color: #fafaf9;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  header a { color: #a8a29e; text-decoration: none; font-size: 13px; }
+  header a:hover { color: #fafaf9; }
+  header h1 { font-size: 16px; font-weight: 600; flex: 1; }
+
+  .filters {
+    background: #fff;
+    border-bottom: 1px solid #e7e5e4;
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .filters select, .filters input {
+    padding: 6px 10px;
+    border: 1px solid #d6d3d1;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fafaf9;
+    color: #1c1917;
+  }
+  .filters input { flex: 1; min-width: 180px; max-width: 300px; }
+  .filters label { font-size: 12px; color: #78716c; }
+  #count { font-size: 12px; color: #78716c; margin-left: auto; white-space: nowrap; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+    padding: 20px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e7e5e4;
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); border-color: #a8a29e; }
+
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .card-id {
+    font-size: 11px;
+    color: #a8a29e;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .card-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .card-jurisdiction { font-size: 12px; color: #78716c; margin-bottom: 8px; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-mandatory-yes    { background: #dcfce7; color: #166534; }
+  .badge-mandatory-no     { background: #f1f5f9; color: #64748b; }
+  .badge-mandatory-cond   { background: #fef9c3; color: #854d0e; }
+  .badge-mandatory-other  { background: #f1f5f9; color: #64748b; }
+  .badge-regtype          { background: #e0f2fe; color: #075985; }
+  .badge-confidence-confirmed { background: #dcfce7; color: #166534; }
+  .badge-confidence-settled   { background: #dcfce7; color: #166534; }
+  .badge-confidence-secondary { background: #fef9c3; color: #854d0e; }
+  .badge-confidence-open      { background: #fee2e2; color: #991b1b; }
+
+  .card-meta {
+    font-size: 12px;
+    color: #44403c;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+  }
+  .card-meta dt { color: #78716c; white-space: nowrap; }
+  .card-meta dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .empty {
+    grid-column: 1/-1;
+    text-align: center;
+    color: #78716c;
+    padding: 60px 0;
+    font-size: 15px;
+  }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 100;
+    overflow-y: auto;
+    padding: 32px 16px;
+  }
+  .modal-backdrop.open { display: flex; align-items: flex-start; justify-content: center; }
+
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 680px;
+    padding: 28px;
+    position: relative;
+    margin: auto;
+  }
+  .modal-close {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #78716c;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #1c1917; }
+
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .modal-jurisdiction { font-size: 13px; color: #78716c; margin-bottom: 14px; }
+  .modal-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+
+  .modal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .modal-table tr:not(:last-child) td { border-bottom: 1px solid #f5f5f4; }
+  .modal-table td { padding: 7px 4px; vertical-align: top; }
+  .modal-table td:first-child {
+    color: #78716c;
+    white-space: nowrap;
+    padding-right: 16px;
+    width: 1%;
+  }
+  .modal-table td:last-child { color: #1c1917; }
+
+  .modal-notes {
+    margin-top: 16px;
+    background: #fafaf9;
+    border: 1px solid #e7e5e4;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #44403c;
+  }
+  .modal-notes strong { display: block; margin-bottom: 4px; color: #1c1917; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+
+  .flag-warn { color: #b45309; font-weight: 500; }
+
+  @media (max-width: 600px) {
+    .grid { padding: 12px; gap: 12px; }
+    .filters { padding: 10px 12px; }
+    header { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Regulations</h1>
+  <a href="/">← Lead Search</a>
+</header>
+
+<div class="filters">
+  <select id="f-region">
+    <option value="">All regions</option>
+    <option>State-wide</option>
+    <option>City of LA</option>
+    <option>LA County</option>
+    <option>LA County core</option>
+    <option>LA County secondary</option>
+  </select>
+
+  <select id="f-mandatory">
+    <option value="">Any status</option>
+    <option value="Yes">Mandatory</option>
+    <option value="Conditional">Conditional</option>
+    <option value="No">No ordinance</option>
+  </select>
+
+  <select id="f-reg-type">
+    <option value="">All types</option>
+    <option value="S">S — State law</option>
+    <option value="1">1 — Standard ordinance</option>
+    <option value="2">2 — Tiered-rate</option>
+    <option value="3">3 — Specific Plan / CPIO</option>
+    <option value="4">4 — CBA</option>
+    <option value="5">5 — Density bonus</option>
+    <option value="6">6 — Legacy redevelopment</option>
+  </select>
+
+  <input type="search" id="f-q" placeholder="Search jurisdiction, program, notes…">
+
+  <span id="count"></span>
+</div>
+
+<div class="grid" id="grid">
+  <div class="empty">Loading…</div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const grid      = document.getElementById('grid');
+  const backdrop  = document.getElementById('modal-backdrop');
+  const modalBody = document.getElementById('modal-body');
+  const countEl   = document.getElementById('count');
+
+  const fRegion   = document.getElementById('f-region');
+  const fMandatory= document.getElementById('f-mandatory');
+  const fRegType  = document.getElementById('f-reg-type');
+  const fQ        = document.getElementById('f-q');
+
+  let debounceTimer;
+
+  function mandatoryClass(m) {
+    if (!m) return 'badge-mandatory-other';
+    const lc = m.toLowerCase();
+    if (lc.startsWith('yes'))         return 'badge-mandatory-yes';
+    if (lc.startsWith('no'))          return 'badge-mandatory-no';
+    if (lc.includes('conditional') || lc.includes('developer')) return 'badge-mandatory-cond';
+    return 'badge-mandatory-other';
+  }
+
+  function confidenceClass(c) {
+    if (!c) return '';
+    const lc = c.toLowerCase();
+    if (lc.includes('confirmed')) return 'badge-confidence-confirmed';
+    if (lc.includes('settled'))   return 'badge-confidence-settled';
+    if (lc.includes('secondary')) return 'badge-confidence-secondary';
+    if (lc.includes('open'))      return 'badge-confidence-open';
+    return '';
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  function renderCard(r) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.dataset.id = r.id;
+
+    const mandClass = mandatoryClass(r.mandatory);
+    const confClass = confidenceClass(r.confidence);
+
+    let metaRows = '';
+    if (r.threshold)     metaRows += `<dt>Threshold</dt><dd title="${esc(r.threshold)}">${esc(r.threshold)}</dd>`;
+    if (r.on_site_rate)  metaRows += `<dt>On-site</dt><dd>${esc(r.on_site_rate)}</dd>`;
+    if (r.in_lieu_rate)  metaRows += `<dt>In-lieu</dt><dd>${esc(r.in_lieu_rate)}</dd>`;
+    if (r.fee_cap && r.fee_cap !== 'None') metaRows += `<dt>Cap</dt><dd>${esc(r.fee_cap)}</dd>`;
+
+    div.innerHTML = `
+      <div class="card-head">
+        <span class="card-id">#${r.id}</span>
+        <span class="card-title">${esc(r.program_name)}</span>
+      </div>
+      <div class="card-jurisdiction">${esc(r.jurisdiction)} · ${esc(r.region)}</div>
+      <div class="badges">
+        ${r.mandatory ? `<span class="badge ${mandClass}">${esc(r.mandatory)}</span>` : ''}
+        ${r.reg_type  ? `<span class="badge badge-regtype">Type ${esc(r.reg_type)}${r.reg_type_label ? ' — ' + esc(r.reg_type_label) : ''}</span>` : ''}
+        ${r.confidence ? `<span class="badge ${confClass}">${esc(r.confidence)}</span>` : ''}
+      </div>
+      ${metaRows ? `<dl class="card-meta">${metaRows}</dl>` : ''}
+    `;
+
+    div.addEventListener('click', () => openModal(r));
+    return div;
+  }
+
+  function tableRow(label, value) {
+    if (!value || value === 'None') return '';
+    return `<tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>`;
+  }
+
+  function openModal(r) {
+    const mandClass = mandatoryClass(r.mandatory);
+    const confClass = confidenceClass(r.confidence);
+
+    const flagHtml = r.currency_risk_flags
+      ? `<p class="flag-warn">⚠ ${esc(r.currency_risk_flags)}</p>` : '';
+
+    modalBody.innerHTML = `
+      <div class="modal-title">${esc(r.program_name)}</div>
+      <div class="modal-jurisdiction">${esc(r.jurisdiction)} · ${esc(r.region)}</div>
+      <div class="modal-badges">
+        ${r.mandatory  ? `<span class="badge ${mandClass}">${esc(r.mandatory)}</span>` : ''}
+        ${r.reg_type   ? `<span class="badge badge-regtype">Type ${esc(r.reg_type)}${r.reg_type_label ? ' — ' + esc(r.reg_type_label) : ''}</span>` : ''}
+        ${r.confidence ? `<span class="badge ${confClass}">${esc(r.confidence)}</span>` : ''}
+      </div>
+      <table class="modal-table">
+        ${tableRow('Code citation',        r.code_citation)}
+        ${tableRow('Adopted / effective',  r.adopted_effective)}
+        ${tableRow('Trigger scope',        r.trigger_scope)}
+        ${tableRow('Threshold',            r.threshold)}
+        ${tableRow('Project types',        r.project_types_covered)}
+        ${tableRow('On-site rate',         r.on_site_rate)}
+        ${tableRow('In-lieu rate',         r.in_lieu_rate)}
+        ${tableRow('Fee cap',              r.fee_cap)}
+        ${tableRow('Compliance options',   r.compliance_options)}
+        ${tableRow('Exemptions',           r.exemptions)}
+        ${tableRow('Administrator / fund', r.administrator_fund)}
+        ${tableRow('Layered with',         r.layered_with)}
+        ${tableRow('Date verified',        r.date_verified)}
+        ${r.source_url ? `<tr><td>Source</td><td><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(r.source_url)}</a></td></tr>` : ''}
+      </table>
+      ${r.notes || flagHtml ? `
+        <div class="modal-notes">
+          <strong>Notes</strong>
+          ${flagHtml}
+          ${r.notes ? esc(r.notes) : ''}
+        </div>` : ''}
+    `;
+
+    backdrop.classList.add('open');
+    window.history.replaceState(null, '', `/regulations/${r.id}`);
+  }
+
+  function closeModal() {
+    backdrop.classList.remove('open');
+    window.history.replaceState(null, '', '/regulations');
+  }
+
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  function buildUrl() {
+    const p = new URLSearchParams();
+    if (fRegion.value)    p.set('region',    fRegion.value);
+    if (fMandatory.value) p.set('mandatory', fMandatory.value);
+    if (fRegType.value)   p.set('reg_type',  fRegType.value);
+    if (fQ.value.trim())  p.set('q',         fQ.value.trim());
+    return '/api/regulations?' + p.toString();
+  }
+
+  function load() {
+    fetch(buildUrl())
+      .then(r => r.json())
+      .then(data => {
+        grid.innerHTML = '';
+        countEl.textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+        if (!data.length) {
+          grid.innerHTML = '<div class="empty">No regulations match these filters.</div>';
+          return;
+        }
+        data.forEach(r => grid.appendChild(renderCard(r)));
+
+        // If a specific ID was requested in the URL, open its modal
+        const openId = {{ open_id | default('null') }};
+        if (openId) {
+          const rec = data.find(r => r.id === openId);
+          if (rec) openModal(rec);
+        }
+      })
+      .catch(() => {
+        grid.innerHTML = '<div class="empty">Failed to load regulations. Is the database seeded?</div>';
+      });
+  }
+
+  function onFilterChange() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(load, 200);
+  }
+
+  fRegion.addEventListener('change', onFilterChange);
+  fMandatory.addEventListener('change', onFilterChange);
+  fRegType.addEventListener('change', onFilterChange);
+  fQ.addEventListener('input', onFilterChange);
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -16,12 +16,18 @@ from tools import (
 )
 from flask import Flask, render_template, request, Response, send_file, stream_with_context, jsonify
 from permits.routes import permits_bp
+from regulations.routes import regulations_bp
+from regulations.db import init_db
+from seed_regulations import RECORDS as _REGULATION_RECORDS
 
 load_dotenv()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max request size
 app.register_blueprint(permits_bp)
+app.register_blueprint(regulations_bp)
+
+init_db(_REGULATION_RECORDS)
 
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 REPORTS_DIR = os.path.join(DATA_DIR, "reports")
