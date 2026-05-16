@@ -494,6 +494,7 @@
             <a href="/" class="active">Lead Finder /</a>
             <a href="/permits-monitor">Opportunities /</a>
             <a href="/reports">Reports /</a>
+            <a href="/regulations">Regulations /</a>
             <a href="https://www.treborden.com/spaces">Our Work /</a>
             <a href="https://www.treborden.com/about_us">About Us /</a>
         </nav>
@@ -596,10 +597,47 @@
         let _leadCacheId = 0;
         const _leadCache = {};
 
+        function saveFilters() {
+            localStorage.setItem('leadFinderFilters', JSON.stringify({
+                segment: selectedSegment,
+                geography: document.getElementById('geoSelect').value,
+                budget: document.getElementById('budgetSelect').value,
+                stage: document.getElementById('stageSelect').value,
+            }));
+        }
+
+        function loadExistingLeads() {
+            const geography = document.getElementById('geoSelect').value;
+            const results = document.getElementById('results');
+            const previousLeadsSection = document.getElementById('previousLeadsSection');
+            const previousLeadCards = document.getElementById('previousLeadCards');
+            const noPreviousLeadsMsg = document.getElementById('noPreviousLeadsMsg');
+
+            previousLeadCards.innerHTML = '';
+            noPreviousLeadsMsg.style.display = 'none';
+
+            fetch('/leads?' + new URLSearchParams({segment: selectedSegment, geography}).toString())
+                .then(r => r.json())
+                .then(leads => {
+                    if (leads.length > 0) {
+                        results.style.display = 'block';
+                        previousLeadsSection.style.display = 'block';
+                        leads.forEach(lead => {
+                            previousLeadCards.insertAdjacentHTML('beforeend', renderLeadCard(lead, false));
+                        });
+                    } else {
+                        previousLeadsSection.style.display = 'none';
+                    }
+                })
+                .catch(() => {});
+        }
+
         function selectSegment(btn) {
             document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             selectedSegment = btn.dataset.segment;
+            saveFilters();
+            loadExistingLeads();
         }
 
         function startDeepDive(key) {
@@ -758,6 +796,34 @@
                 addLogLine("Unable to connect. Please wait a moment and try again.", false);
             };
         }
+
+        // ── Filter persistence + initial lead load ───────────────────────────
+        (function() {
+            // Restore saved filters
+            try {
+                const saved = JSON.parse(localStorage.getItem('leadFinderFilters') || '{}');
+                if (saved.segment) {
+                    document.querySelectorAll('.segment-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.segment === saved.segment);
+                    });
+                    selectedSegment = saved.segment;
+                }
+                if (saved.geography) document.getElementById('geoSelect').value = saved.geography;
+                if (saved.budget)   document.getElementById('budgetSelect').value = saved.budget;
+                if (saved.stage)    document.getElementById('stageSelect').value = saved.stage;
+            } catch(e) {}
+
+            // Reload existing leads when any filter dropdown changes
+            document.getElementById('geoSelect').addEventListener('change', function() {
+                saveFilters();
+                loadExistingLeads();
+            });
+            document.getElementById('budgetSelect').addEventListener('change', saveFilters);
+            document.getElementById('stageSelect').addEventListener('change', saveFilters);
+
+            // Show existing leads on initial page load
+            loadExistingLeads();
+        })();
 
         // ── Deep Dive from Permits page ──────────────────────────────────────
         (function() {
