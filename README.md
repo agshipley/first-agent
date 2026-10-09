@@ -7,6 +7,19 @@ An AI-powered lead generation and permit intelligence system for [Tre Borden /Co
 
 ---
 
+## Technical summary for evaluators
+
+This system deliberately uses **two different reasoning methods for two different signal sources**:
+
+1. **Unstructured opportunity discovery:** Claude performs web-assisted prospect research and follow-up deep dives. Results are scored against a client-specific ideal customer profile and recorded for review.
+2. **Structured early-warning signals:** A separate, deterministic engine normalizes municipal permit feeds, recognizes project types and property-owner patterns, applies jurisdiction-specific public-art rules, and ranks opportunities without requiring an LLM call per permit.
+
+The architecture separates a comparatively expensive, interpretive research agent from an inexpensive, inspectable rules engine. City adapters map inconsistent government datasets into a shared permit schema; the system exposes both kinds of opportunity through one Flask application. See the [architecture](#architecture-overview), [scoring logic](#scoring-engine), and [test organization](#test-organization).
+
+**Operational scope:** Designed for a small number of users. The Railway deployment uses a single Gunicorn worker and a spreadsheet/JSON datastore rather than claiming enterprise-scale concurrency or a multi-tenant CRM. The documented test suite mocks outside APIs; it does not establish uninterrupted live-feed reliability. The value is the integration of actual municipal data with business-specific qualification and research workflows.
+
+---
+
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
