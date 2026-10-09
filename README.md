@@ -1,6 +1,6 @@
-# Tre Borden /Co — Art Commission Lead Intelligence
+# TBC Intelligence
 
-An AI-powered lead generation and permit intelligence system for [Tre Borden /Co](https://www.treborden.com), a Los Angeles creative studio that curates and commissions art for corporate and public spaces. The system combines two complementary tools: an **AI lead finder** that uses Claude with web search to discover potential clients, and a **permit intelligence engine** that scores live building permit data for art commissioning relevance across Los Angeles, New York, and San Francisco.
+An AI-powered business-development and project intelligence system built for and used by [Tre Borden /Co](https://www.treborden.com), a Los Angeles creative studio that curates and commissions art for corporate and public spaces. The system combines two complementary tools: an **AI lead finder** that uses Claude with web search to discover potential clients, and a **permit intelligence engine** that scores live building permit data for art commissioning relevance across Los Angeles, New York, and San Francisco.
 
 **Live at:** Deployed on Railway (auto-deploys from `main`)
 **License:** Apache 2.0
